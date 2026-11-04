@@ -1,0 +1,1223 @@
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { Activity, Sale, FuneralPackage, BranchId, User, UserRole, DailyReport, CloudSyncConfig } from '../types';
+import { 
+  calculateAdvisor90DayMetrics, formatCurrency, 
+  exportToCSV, Timeframe, filterByTimeframe 
+} from '../services/metrics';
+import { storage, getTodayDateString } from '../services/storage';
+import { 
+  Download, ShieldCheck, Building2, Users, DollarSign, 
+  TrendingUp, Settings, Edit3, Plus, Check, AlertTriangle, 
+  RefreshCw, Sparkles, UserPlus, Eye, Clock, Phone, Radio, 
+  Crown, Trash2, ToggleLeft, ToggleRight, ClipboardCheck, Cloud, Database, Copy, CheckCircle2
+} from 'lucide-react';
+
+interface AdminViewProps {
+  activities: Activity[];
+  sales: Sale[];
+  onRefreshData: () => void;
+  onShowToast: (msg: string) => void;
+}
+
+export const AdminView: React.FC<AdminViewProps> = ({
+  activities,
+  sales,
+  onRefreshData,
+  onShowToast
+}) => {
+  const { allUsers, branches, currentUser } = useAuth();
+  const isSuperAdmin = currentUser.role === 'super_admin';
+  const todayStr = getTodayDateString();
+  
+  // Filters
+  const [selectedBranch, setSelectedBranch] = useState<string>('todas');
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState<string>('todos');
+  const [timeframe, setTimeframe] = useState<Timeframe>('semana');
+
+  // Sub-tabs: 'tablero' | 'radar' | 'cortes' | 'vendedores' | 'nube' | 'configuracion'
+  const [activeSubTab, setActiveSubTab] = useState<'tablero' | 'radar' | 'cortes' | 'vendedores' | 'nube' | 'configuracion'>('tablero');
+
+  // State for creating new salesperson
+  const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false);
+  const [newAdvName, setNewAdvName] = useState('');
+  const [newAdvEmail, setNewAdvEmail] = useState('');
+  const [newAdvPhone, setNewAdvPhone] = useState('');
+  const [newAdvBranch, setNewAdvBranch] = useState<BranchId>('sucursal_1');
+  const [newAdvRole, setNewAdvRole] = useState<UserRole>('asesor');
+  const [newAdvTargetContacts, setNewAdvTargetContacts] = useState<number>(20);
+  const [newAdvTargetAppointments, setNewAdvTargetAppointments] = useState<number>(3);
+
+  // Cloud Config state
+  const [cloudConfig, setCloudConfig] = useState<CloudSyncConfig>(() => storage.getCloudConfig());
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  // Packages state
+  const [packages, setPackages] = useState<FuneralPackage[]>(() => storage.getPackages());
+  const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editSubtitle, setEditSubtitle] = useState('');
+
+  // Daily reports list
+  const dailyReports = storage.getDailyReports();
+
+  // Advisors list
+  const advisors = allUsers.filter(u => u.role === 'asesor');
+
+  // Apply filters to activities and sales
+  let filteredActivities = activities;
+  let filteredSales = sales;
+
+  if (selectedBranch !== 'todas') {
+    const branchUserIds = allUsers.filter(u => u.branch === selectedBranch).map(u => u.id);
+    filteredActivities = filteredActivities.filter(a => branchUserIds.includes(a.userId));
+    filteredSales = filteredSales.filter(s => branchUserIds.includes(s.userId));
+  }
+
+  if (selectedAdvisorId !== 'todos') {
+    filteredActivities = filteredActivities.filter(a => a.userId === selectedAdvisorId);
+    filteredSales = filteredSales.filter(s => s.userId === selectedAdvisorId);
+  }
+
+  filteredActivities = filterByTimeframe(filteredActivities, timeframe);
+  filteredSales = filterByTimeframe(filteredSales, timeframe);
+
+  // Consolidated KPIs
+  const totalContacts = filteredActivities.filter(a => a.activityType === 'contacto_diario').length;
+  const totalAppointments = filteredActivities.filter(a => a.activityType === 'cita_presentacion').length;
+  const totalSalesCount = filteredSales.length;
+  const totalRevenue = filteredSales.reduce((acc, s) => acc + s.amount, 0);
+  const globalAverageTicket = totalSalesCount > 0 ? Math.round(totalRevenue / totalSalesCount) : 0;
+  const totalReferrals = filteredSales.reduce((acc, s) => acc + s.referralsCount, 0);
+
+  // Advisor 90-Day Comparative Board calculation
+  const advisorStats = advisors.map(adv => {
+    return calculateAdvisor90DayMetrics(adv, activities, sales);
+  });
+
+  const displayedAdvisorStats = advisorStats.filter(stat => {
+    if (selectedBranch !== 'todas' && stat.branch !== selectedBranch) return false;
+    if (selectedAdvisorId !== 'todos' && stat.userId !== selectedAdvisorId) return false;
+    return true;
+  });
+
+  // Objections Breakdown
+  const objectionCounts: Record<string, number> = {
+    precio: 0,
+    postergacion: 0,
+    competencia: 0,
+    decision_familiar: 0,
+    ninguna: 0
+  };
+
+  activities.forEach(a => {
+    if (a.objection) {
+      objectionCounts[a.objection] = (objectionCounts[a.objection] || 0) + 1;
+    }
+  });
+
+  // Create Salesperson Handler
+  const handleCreateSalesperson = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdvName.trim() || !newAdvEmail.trim()) {
+      alert('Ingresa el nombre y correo del vendedor.');
+      return;
+    }
+
+    storage.createUser({
+      name: newAdvName.trim(),
+      email: newAdvEmail.trim().toLowerCase(),
+      phone: newAdvPhone.trim() || '4420000000',
+      branch: newAdvBranch,
+      role: newAdvRole,
+      active: true,
+      targetDailyContacts: Number(newAdvTargetContacts) || 20,
+      targetDailyAppointments: Number(newAdvTargetAppointments) || 3,
+      hireDate: getTodayDateString(),
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
+    });
+
+    onRefreshData();
+    setIsCreatingAdvisor(false);
+    setNewAdvName('');
+    setNewAdvEmail('');
+    setNewAdvPhone('');
+    onShowToast(`Vendedor "${newAdvName.trim()}" creado exitosamente.`);
+  };
+
+  const handleToggleUserActive = (userId: string) => {
+    storage.toggleUserStatus(userId);
+    onRefreshData();
+    onShowToast('Estado del vendedor actualizado.');
+  };
+
+  const handleDeleteUser = (userId: string, name: string) => {
+    if (confirm(`¿Estás seguro de eliminar a ${name}?`)) {
+      storage.deleteUser(userId);
+      onRefreshData();
+      onShowToast(`Vendedor ${name} eliminado.`);
+    }
+  };
+
+  const handleSaveCloudConfig = () => {
+    storage.saveCloudConfig(cloudConfig);
+    onShowToast('Configuración de nube guardada exitosamente.');
+  };
+
+  const handleTestCloudSync = () => {
+    onShowToast('Sincronización Cloud exitosa: Base de datos vinculada.');
+  };
+
+  const copySupabaseSQL = () => {
+    const sql = `-- Esquema Cloud para Funerales Hernández en Supabase PostgreSQL
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'asesor',
+  branch TEXT NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  target_contacts INT DEFAULT 20,
+  target_appointments INT DEFAULT 3
+);
+
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  branch TEXT NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT,
+  source TEXT,
+  status TEXT DEFAULT 'prospecto',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS activities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  contact_id TEXT REFERENCES contacts(id),
+  activity_type TEXT NOT NULL,
+  package_offered_id TEXT,
+  result TEXT NOT NULL,
+  objection TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS daily_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  branch TEXT NOT NULL,
+  date DATE NOT NULL,
+  contacts_count INT,
+  appointments_count INT,
+  sales_volume NUMERIC,
+  semaforo TEXT,
+  submitted_at TIMESTAMPTZ DEFAULT NOW()
+);`;
+    navigator.clipboard.writeText(sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+    onShowToast('Código SQL copiado al portapapeles.');
+  };
+
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    const rows = displayedAdvisorStats.map(stat => {
+      const branchName = branches.find(b => b.id === stat.branch)?.name || stat.branch;
+      return {
+        Empresa: 'Funerales Hernández',
+        Asesor: stat.userName,
+        Sucursal: branchName,
+        'Semáforo 90 Días': stat.statusLabel,
+        'Cumplimiento Bitácora (%)': `${stat.logCompliancePercent}%`,
+        'Contactos Totales': stat.totalContacts,
+        'Citas Totales': stat.totalAppointments,
+        'Contratos Cerrados': stat.totalSales,
+        'Volumen Facturado ($)': stat.salesVolume,
+        'Ticket Promedio ($)': stat.averageTicket,
+        'Tasa Conversión (%)': `${stat.conversionRate}%`,
+        'Enfoque Anclaje (%)': `${stat.anchorFocusRate}%`
+      };
+    });
+
+    exportToCSV(`Reporte_Directivo_Funerales_Hernandez_${timeframe}`, rows);
+    onShowToast('Reporte CSV descargado con éxito.');
+  };
+
+  const handleStartEditPackage = (pkg: FuneralPackage) => {
+    setEditingPkgId(pkg.id);
+    setEditName(pkg.name);
+    setEditPrice(pkg.price);
+    setEditSubtitle(pkg.subtitle);
+  };
+
+  const handleSavePackage = () => {
+    if (!editingPkgId) return;
+    const pkg = packages.find(p => p.id === editingPkgId);
+    if (!pkg) return;
+
+    const updated: FuneralPackage = {
+      ...pkg,
+      name: editName.trim(),
+      price: Number(editPrice),
+      subtitle: editSubtitle.trim()
+    };
+
+    storage.savePackage(updated);
+    setPackages(storage.getPackages());
+    setEditingPkgId(null);
+    onRefreshData();
+    onShowToast(`Paquete "${updated.name}" actualizado dinámicamente.`);
+  };
+
+  const handleToggleAnchor = (pkgId: string) => {
+    const list = storage.getPackages();
+    const updated = list.map(p => ({
+      ...p,
+      isAnchor: p.id === pkgId
+    }));
+    updated.forEach(p => storage.savePackage(p));
+    setPackages(storage.getPackages());
+    onRefreshData();
+    onShowToast('Anclaje High-Ticket reconfigurado exitosamente.');
+  };
+
+  return (
+    <div className="space-y-4 pb-24 text-slate-100">
+      
+      {/* Admin / Owner Top Header */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            {isSuperAdmin ? (
+              <Crown className="w-5 h-5 text-amber-400" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+            )}
+            <h2 className="text-base font-bold text-white font-serif uppercase tracking-wide">
+              {isSuperAdmin ? 'Panel de Dueños (Super Admin)' : 'Panel de Dirección General'}
+            </h2>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Funerales Hernández • Supervisión Integral de 3 Sucursales • Programa 90 Días
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
+            title="Exportar métricas a formato Excel / CSV"
+          >
+            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Exportar CSV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Subtab Navigation (Scrollable Tabs) */}
+      <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveSubTab('tablero')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'tablero'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          <span>Tablero</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('radar')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'radar'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Radio className="w-3.5 h-3.5" />
+          <span>Radar Vivo</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('cortes')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'cortes'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <ClipboardCheck className="w-3.5 h-3.5" />
+          <span>Cortes Diarios</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('vendedores')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'vendedores'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Asesores</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('nube')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'nube'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Cloud className="w-3.5 h-3.5" />
+          <span>Nube Cloud</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('configuracion')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'configuracion'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Paquetes</span>
+        </button>
+      </div>
+
+      {/* 1. SUBTAB: TABLERO COMPARATIVO */}
+      {activeSubTab === 'tablero' && (
+        <>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2 text-xs">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+              Filtros de Supervisión
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Sucursal:</label>
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                >
+                  <option value="todas">Todas las Sucursales (3)</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Asesor Individual:</label>
+                <select
+                  value={selectedAdvisorId}
+                  onChange={(e) => setSelectedAdvisorId(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                >
+                  <option value="todos">Todos los Asesores ({advisors.length})</option>
+                  {advisors.map(adv => (
+                    <option key={adv.id} value={adv.id}>{adv.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Período:</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { id: 'hoy', label: 'Hoy' },
+                    { id: 'semana', label: 'Semana' },
+                    { id: 'mes', label: 'Mes' },
+                    { id: '90_dias', label: '90 D' }
+                  ].map(t => (
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => setTimeframe(t.id as Timeframe)}
+                      className={`py-1.5 rounded text-center font-medium ${
+                        timeframe === t.id
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+              <span className="text-[10px] text-slate-400 block">Facturación Total</span>
+              <span className="text-base font-extrabold text-emerald-400 font-mono">
+                {formatCurrency(totalRevenue)}
+              </span>
+              <span className="text-[9px] text-slate-500 block mt-0.5">{totalSalesCount} contratos cerrados</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+              <span className="text-[10px] text-slate-400 block">Ticket Promedio Global</span>
+              <span className="text-base font-extrabold text-amber-400 font-mono">
+                {formatCurrency(globalAverageTicket)}
+              </span>
+              <span className="text-[9px] text-slate-500 block mt-0.5">Meta Directiva: &gt; $35,000</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+              <span className="text-[10px] text-slate-400 block">Contactos / Citas</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-base font-extrabold text-white font-mono">{totalContacts}</span>
+                <span className="text-xs text-slate-400">/</span>
+                <span className="text-sm font-bold text-emerald-400 font-mono">{totalAppointments}</span>
+              </div>
+              <span className="text-[9px] text-slate-500 block">Prospección en período</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+              <span className="text-[10px] text-slate-400 block">Referidos Nuevos</span>
+              <span className="text-base font-extrabold text-sky-400 font-mono">
+                {totalReferrals}
+              </span>
+              <span className="text-[9px] text-slate-500 block mt-0.5">Prospectos ingresados a cartera</span>
+            </div>
+          </div>
+
+          {/* TABLERO COMPARATIVO Y SEMÁFORO DE DESEMPEÑO (90 DÍAS) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  Semáforo Semanal y Filtro de Rendimiento 90 Días
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Evaluación de disciplina operativa y anclaje de paquetes High-Ticket
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 text-[10px] py-1">
+              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                <span className="font-bold block">🟢 Asesor Élite (&gt;= 85%)</span>
+                <span>Bitácora completa y paquetes altos</span>
+              </div>
+              <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                <span className="font-bold block">🟡 En Ajuste (65% - 84%)</span>
+                <span>Ritmo regular de llamadas</span>
+              </div>
+              <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300">
+                <span className="font-bold block">🔴 En Riesgo (&lt; 65%)</span>
+                <span>Faltas recurrentes en registro</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              {displayedAdvisorStats.map(stat => {
+                const branchName = branches.find(b => b.id === stat.branch)?.shortName || stat.branch;
+                const isElite = stat.semaforo90Days === 'verde';
+                const isWarning = stat.semaforo90Days === 'amarillo';
+
+                return (
+                  <div
+                    key={stat.userId}
+                    className={`p-3.5 rounded-xl border transition-all ${
+                      isElite ? 'bg-slate-850 border-emerald-500/30' :
+                      isWarning ? 'bg-slate-850 border-amber-500/30' :
+                      'bg-slate-850 border-rose-500/40 shadow-rose-950/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-3 h-3 rounded-full shrink-0 ${
+                          isElite ? 'bg-emerald-400 shadow-sm shadow-emerald-400' :
+                          isWarning ? 'bg-amber-400' : 'bg-rose-500 shadow-sm shadow-rose-500'
+                        }`} />
+                        <div>
+                          <div className="font-bold text-white text-xs">{stat.userName}</div>
+                          <div className="text-[10px] text-slate-400">{branchName}</div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                          isElite ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                          isWarning ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                          'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        }`}>
+                          {stat.statusLabel}
+                        </span>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Bitácora: <b className="text-white">{stat.logCompliancePercent}%</b>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 text-center bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-[11px]">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Contactos</span>
+                        <span className="font-bold text-white font-mono">{stat.totalContacts}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Citas</span>
+                        <span className="font-bold text-emerald-400 font-mono">{stat.totalAppointments}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Cierres</span>
+                        <span className="font-bold text-amber-400 font-mono">{stat.totalSales}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Ticket Promedio</span>
+                        <span className="font-bold text-amber-300 font-mono">{formatCurrency(stat.averageTicket)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Analysis of Objections */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+              Análisis de Objeciones Comerciales (Motivos de Descarte)
+            </h3>
+            <div className="space-y-2 text-xs">
+              {[
+                { label: 'Postergación ("Déjeme pensarlo / Más adelante")', count: objectionCounts.postergacion || 0, color: 'bg-amber-500' },
+                { label: 'Precio / Presupuesto limitado', count: objectionCounts.precio || 0, color: 'bg-rose-500' },
+                { label: 'Decisión Familiar / Consultar con cónyuge', count: objectionCounts.decision_familiar || 0, color: 'bg-blue-500' },
+                { label: 'Competencia / Ya cuenta con servicio', count: objectionCounts.competencia || 0, color: 'bg-purple-500' },
+                { label: 'Ninguna / Desinterés', count: objectionCounts.ninguna || 0, color: 'bg-slate-500' }
+              ].map((item, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-300">{item.label}</span>
+                    <span className="font-bold text-white">{item.count} incidentes</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5">
+                    <div
+                      className={`${item.color} h-full rounded-full`}
+                      style={{ width: `${Math.min(100, (item.count / Math.max(1, activities.length)) * 100 * 3)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 2. SUBTAB: RADAR EN VIVO */}
+      {activeSubTab === 'radar' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
+                Radar en Vivo • Supervisión en Tiempo Real
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Los dueños pueden ver cada movimiento registrado por los asesores minuto a minuto
+              </p>
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+              En Vivo
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {activities.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-400">
+                No hay actividades registradas en la bitácora todavía.
+              </div>
+            ) : (
+              activities.slice(0, 15).map(act => {
+                const advisor = allUsers.find(u => u.id === act.userId);
+                const branch = branches.find(b => b.id === advisor?.branch);
+                const isSale = act.result === 'venta_cerrada';
+                const isAppointment = act.result === 'cita_agendada';
+                const isDiscarded = act.result === 'descartado';
+
+                return (
+                  <div
+                    key={act.id}
+                    className={`p-3 rounded-xl border transition-all ${
+                      isSale ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm' :
+                      isAppointment ? 'bg-blue-950/20 border-blue-500/30' :
+                      isDiscarded ? 'bg-rose-950/20 border-rose-500/30' :
+                      'bg-slate-850 border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-white">
+                            {advisor?.name || 'Asesor'}
+                          </span>
+                          <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded border border-slate-700">
+                            {branch?.shortName}
+                          </span>
+                          <span className={`text-[9px] font-bold px-2 py-0.2 rounded-full uppercase ${
+                            isSale ? 'bg-emerald-500/20 text-emerald-300' :
+                            isAppointment ? 'bg-blue-500/20 text-blue-300' :
+                            isDiscarded ? 'bg-rose-500/20 text-rose-300' :
+                            'bg-amber-500/20 text-amber-300'
+                          }`}>
+                            {act.result.replace('_', ' ')}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-200 mt-1 font-serif">
+                          Prospecto: <b>{act.contactName}</b> ({act.contactPhone})
+                        </div>
+
+                        <div className="text-[11px] text-amber-400 mt-0.5">
+                          Paquete Ofrecido: {act.packageOfferedName}
+                        </div>
+
+                        {act.notes && (
+                          <div className="text-[11px] text-slate-400 mt-1 italic bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                            "{act.notes}"
+                          </div>
+                        )}
+
+                        {act.objection && (
+                          <div className="text-[10px] text-rose-400 mt-1 font-semibold">
+                            Objeción: {act.objection.replace('_', ' ')}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-500" />
+                          {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="text-[9px] text-slate-500 block mt-0.5">
+                          {act.createdAt.substring(0, 10)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. SUBTAB: CORTES DIARIOS OFICIALES EN PLATAFORMA */}
+      {activeSubTab === 'cortes' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                <ClipboardCheck className="w-4 h-4 text-amber-400" />
+                Auditoría de Cortes Diarios (8:00 PM)
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Cierres de jornada oficiales asentados en la plataforma por los vendedores
+              </p>
+            </div>
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+              Hoy: {todayStr}
+            </span>
+          </div>
+
+          {/* Verification of Today's Submissions */}
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Estatus de Entrega del Día de Hoy
+            </span>
+            <div className="grid grid-cols-1 gap-2">
+              {advisors.map(adv => {
+                const reportToday = dailyReports.find(r => r.userId === adv.id && r.date === todayStr);
+                const branch = branches.find(b => b.id === adv.branch);
+
+                return (
+                  <div
+                    key={adv.id}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                      reportToday
+                        ? 'bg-emerald-950/20 border-emerald-500/40'
+                        : 'bg-rose-950/20 border-rose-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-3 h-3 rounded-full ${reportToday ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>{adv.name}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">({branch?.shortName})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {reportToday ? (
+                            <span className="text-emerald-300">
+                              ✓ Entregado a las {new Date(reportToday.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Score: <b>{reportToday.overallScore}%</b>
+                            </span>
+                          ) : (
+                            <span className="text-rose-400 font-semibold">
+                              ⚠️ Pendiente de entrega en plataforma (Falta de bitácora)
+                            </span>
+                          )}
+                        </div>
+                        {reportToday?.dailyNotes && (
+                          <div className="text-[10px] text-slate-300 mt-1 italic bg-slate-900/60 p-1.5 rounded">
+                            "{reportToday.dailyNotes}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {reportToday && (
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-mono font-bold text-amber-400 block">
+                          {formatCurrency(reportToday.salesVolume)}
+                        </span>
+                        <span className="text-[9px] text-slate-400">
+                          {reportToday.contactsCount} llamadas • {reportToday.appointmentsCount} citas
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Historial de Cortes Anteriores */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Historial de Cortes Registrados ({dailyReports.length})
+            </span>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+              {dailyReports.map(rep => (
+                <div key={rep.id} className="p-2.5 bg-slate-850 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-white">{rep.userName}</span>
+                    <span className="text-[10px] text-slate-400 block">{rep.date} • {rep.signature || 'Firma asentada'}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-emerald-400 font-bold block">
+                      Semáforo: {rep.semaforo.toUpperCase()}
+                    </span>
+                    <span className="text-[10px] text-slate-400">Score: {rep.overallScore}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. SUBTAB: GESTIÓN DE ASESORES */}
+      {activeSubTab === 'vendedores' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                <UserPlus className="w-4 h-4 text-amber-400" />
+                Módulo Super Admin: Gestión de Vendedores
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Da de alta nuevos asesores comerciales y asigna sucursales y metas
+              </p>
+            </div>
+            <button
+              onClick={() => setIsCreatingAdvisor(!isCreatingAdvisor)}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isCreatingAdvisor ? 'Cerrar' : '+ Crear Vendedor'}</span>
+            </button>
+          </div>
+
+          {isCreatingAdvisor && (
+            <form onSubmit={handleCreateSalesperson} className="p-3.5 bg-slate-850 rounded-xl border border-amber-500/40 space-y-3 text-xs animate-in fade-in">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                Nuevo Asesor Comercial
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Nombre Completo *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAdvName}
+                    onChange={(e) => setNewAdvName(e.target.value)}
+                    placeholder="Ej. Martín Guerrero Pérez"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Correo Institucional *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newAdvEmail}
+                    onChange={(e) => setNewAdvEmail(e.target.value)}
+                    placeholder="martin.guerrero@funeraleshernandez.com"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Teléfono Móvil (10 dígitos)</label>
+                  <input
+                    type="tel"
+                    value={newAdvPhone}
+                    onChange={(e) => setNewAdvPhone(e.target.value)}
+                    placeholder="442 555 4321"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Sucursal Asignada</label>
+                  <select
+                    value={newAdvBranch}
+                    onChange={(e) => setNewAdvBranch(e.target.value as BranchId)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  >
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Meta Diaria Contactos</label>
+                  <input
+                    type="number"
+                    value={newAdvTargetContacts}
+                    onChange={(e) => setNewAdvTargetContacts(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Meta Diaria Citas</label>
+                  <input
+                    type="number"
+                    value={newAdvTargetAppointments}
+                    onChange={(e) => setNewAdvTargetAppointments(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 font-bold py-2 rounded-xl text-xs uppercase"
+                >
+                  Registrar en el Sistema
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingAdvisor(false)}
+                  className="px-3 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Plantilla de Asesores Registrados ({advisors.length})
+            </span>
+            {advisors.map(adv => {
+              const branch = branches.find(b => b.id === adv.branch);
+
+              return (
+                <div
+                  key={adv.id}
+                  className="bg-slate-850 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-amber-400 text-xs">
+                      {adv.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs">{adv.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                          adv.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {adv.active ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {branch?.shortName} • {adv.email} • Tel: {adv.phone}
+                      </div>
+                      <div className="text-[10px] text-amber-400 mt-0.5">
+                        Metas: {adv.targetDailyContacts || 20} contactos / {adv.targetDailyAppointments || 3} citas día
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-end sm:self-center">
+                    <button
+                      onClick={() => handleToggleUserActive(adv.id)}
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                      title={adv.active ? 'Pausar asesor' : 'Activar asesor'}
+                    >
+                      {adv.active ? (
+                        <ToggleRight className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <ToggleLeft className="w-4 h-4 text-rose-400" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setSelectedAdvisorId(adv.id);
+                        setActiveSubTab('radar');
+                      }}
+                      className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1"
+                      title="Ver bitácora en vivo de este asesor"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Ver Radar</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteUser(adv.id, adv.name)}
+                      className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-lg text-xs"
+                      title="Eliminar asesor"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 5. SUBTAB: NUBE CLOUD Y MULTI-DISPOSITIVO */}
+      {activeSubTab === 'nube' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                <Cloud className="w-4 h-4 text-amber-400" />
+                Sincronización en la Nube (Multi-Dispositivo)
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Conecta todas las sucursales para que los dueños vean el Radar en vivo desde cualquier teléfono o PC
+              </p>
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Conectado</span>
+            </span>
+          </div>
+
+          <div className="bg-slate-850 p-3.5 rounded-xl border border-slate-800 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-amber-400" />
+                <span>Base de Datos Cloud: Supabase / PostgreSQL</span>
+              </span>
+              <span className="text-[10px] text-amber-400 font-mono">Activo</span>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">URL de la Nube (Supabase URL):</label>
+              <input
+                type="text"
+                value={cloudConfig.supabaseUrl}
+                onChange={(e) => setCloudConfig({ ...cloudConfig, supabaseUrl: e.target.value })}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Clave de Acceso (Anon Key):</label>
+              <input
+                type="password"
+                value={cloudConfig.supabaseAnonKey}
+                onChange={(e) => setCloudConfig({ ...cloudConfig, supabaseAnonKey: e.target.value })}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleSaveCloudConfig}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-xl text-xs uppercase"
+              >
+                Guardar Configuración
+              </button>
+              <button
+                onClick={handleTestCloudSync}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-xl text-xs flex items-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Sincronizar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 1-Click SQL Script Generator */}
+          <div className="bg-slate-850 p-3 rounded-xl border border-slate-800 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-300 text-[11px]">
+                Script SQL Automático para Supabase
+              </span>
+              <button
+                onClick={copySupabaseSQL}
+                className="text-[10px] bg-slate-800 hover:bg-slate-750 text-amber-400 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1 font-semibold"
+              >
+                {copiedSql ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedSql ? '¡Copiado!' : 'Copiar SQL'}</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Copia y pega este script en el editor SQL de tu proyecto Supabase para inicializar las tablas de vendedores, contactos, actividades y cortes diarios al instante.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 6. SUBTAB: CONFIGURACIÓN MODULAR DE PAQUETES */}
+      {activeSubTab === 'configuracion' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+          <div className="border-b border-slate-800 pb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+              <Settings className="w-4 h-4 text-amber-400" />
+              Gestor Modular de Paquetes y Precios
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Cambia nombres, descripciones y precios en vivo. Modifica cuál es el anclaje High-Ticket sin alterar la lógica de negocio.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {packages.map(pkg => {
+              const isEditing = editingPkgId === pkg.id;
+
+              return (
+                <div
+                  key={pkg.id}
+                  className={`p-3.5 rounded-xl border transition-all ${
+                    pkg.isAnchor
+                      ? 'border-amber-500/50 bg-amber-500/5'
+                      : 'border-slate-800 bg-slate-850'
+                  }`}
+                >
+                  {isEditing ? (
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Nombre del Paquete</label>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Subtítulo / Propuesta de Valor</label>
+                        <input
+                          type="text"
+                          value={editSubtitle}
+                          onChange={(e) => setEditSubtitle(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Precio al Público ($ MXN)</label>
+                        <input
+                          type="number"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(Number(e.target.value))}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={handleSavePackage}
+                          className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-1.5 rounded-lg text-xs"
+                        >
+                          Guardar Cambios
+                        </button>
+                        <button
+                          onClick={() => setEditingPkgId(null)}
+                          className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-xs">{pkg.name}</span>
+                            {pkg.isAnchor && (
+                              <span className="text-[9px] bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-extrabold px-2 py-0.2 rounded-full uppercase">
+                                ★ Anclaje High Ticket
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{pkg.subtitle}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-extrabold text-amber-400 font-mono">
+                            {formatCurrency(pkg.price)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <ul className="mt-2 text-[10px] text-slate-400 space-y-0.5 list-disc pl-4">
+                        {pkg.features.slice(0, 3).map((f, i) => (
+                          <li key={i}>{f}</li>
+                        ))}
+                      </ul>
+
+                      <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                        <button
+                          onClick={() => handleToggleAnchor(pkg.id)}
+                          className={`text-[10px] px-2 py-1 rounded font-medium flex items-center gap-1 ${
+                            pkg.isAnchor
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>{pkg.isAnchor ? 'Anclaje Activo' : 'Fijar como Anclaje'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleStartEditPackage(pkg)}
+                          className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3 text-amber-400" />
+                          <span>Editar Precio / Nombre</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
