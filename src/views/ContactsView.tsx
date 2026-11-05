@@ -85,8 +85,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         ))}
       </div>
 
-      {/* Contact Cards List */}
-      <div className="space-y-2.5">
+      {/* Contact Cards List (Responsive Grid for Mobile & Desktop) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {filtered.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-xs text-slate-400">
             <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />

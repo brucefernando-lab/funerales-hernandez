@@ -146,8 +146,8 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
         ))}
       </div>
 
-      {/* Core KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Core KPI Cards Grid (Responsive 2 cols on Mobile, 4 cols on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {/* Contactos vs Meta */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">

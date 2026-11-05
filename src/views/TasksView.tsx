@@ -129,8 +129,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </button>
       </div>
 
-      {/* Task List */}
-      <div className="space-y-2.5">
+      {/* Task List (Responsive Grid for Mobile & Desktop) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {filteredTasks.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-xs text-slate-400">
             <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />

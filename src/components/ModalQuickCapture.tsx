@@ -11,18 +11,28 @@ import { storage, getTodayDateString } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
 import confetti from 'canvas-confetti';
 
+export interface InitialPackageData {
+  id: string;
+  name: string;
+  price: number;
+  chapelId?: string;
+  termSummary?: string;
+}
+
 interface ModalQuickCaptureProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
   initialContact?: { name: string; phone: string; id?: string };
+  initialPackage?: InitialPackageData;
 }
 
 export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  initialContact
+  initialContact,
+  initialPackage
 }) => {
   const { currentUser, currentBranch } = useAuth();
   const [packages, setPackages] = useState<FuneralPackage[]>([]);
@@ -58,10 +68,21 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
     if (isOpen) {
       const pkgs = storage.getPackages().filter(p => p.active);
       setPackages(pkgs);
-      const anchorPkg = pkgs.find(p => p.isAnchor) || pkgs[0];
-      if (anchorPkg) {
-        setSelectedPackageId(anchorPkg.id);
-        setSaleAmount(anchorPkg.price);
+
+      if (initialPackage) {
+        setSelectedPackageId(initialPackage.id);
+        setSaleAmount(initialPackage.price);
+        setActivityType('cita_presentacion');
+        setNotes(initialPackage.termSummary 
+          ? `Cotización: ${initialPackage.name} (${initialPackage.termSummary})` 
+          : `Interés en plan: ${initialPackage.name}`
+        );
+      } else {
+        const anchorPkg = pkgs.find(p => p.isAnchor) || pkgs[0];
+        if (anchorPkg) {
+          setSelectedPackageId(anchorPkg.id);
+          setSaleAmount(anchorPkg.price);
+        }
       }
 
       if (initialContact) {
@@ -70,13 +91,13 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       } else {
         setName('');
         setPhone('');
-        setNotes('');
+        if (!initialPackage) setNotes('');
         setResult('en_seguimiento');
         setReferrals([{ name: '', phone: '' }]);
       }
       setPhoneError('');
     }
-  }, [isOpen, initialContact]);
+  }, [isOpen, initialContact, initialPackage]);
 
   if (!isOpen) return null;
 
