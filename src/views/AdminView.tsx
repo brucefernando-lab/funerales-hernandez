@@ -41,12 +41,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
   // State for creating new salesperson
   const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false);
   const [newAdvName, setNewAdvName] = useState('');
+  const [newAdvUsername, setNewAdvUsername] = useState('');
+  const [newAdvPassword, setNewAdvPassword] = useState('123');
   const [newAdvEmail, setNewAdvEmail] = useState('');
   const [newAdvPhone, setNewAdvPhone] = useState('');
   const [newAdvBranch, setNewAdvBranch] = useState<BranchId>('sucursal_1');
   const [newAdvRole, setNewAdvRole] = useState<UserRole>('asesor');
   const [newAdvTargetContacts, setNewAdvTargetContacts] = useState<number>(20);
   const [newAdvTargetAppointments, setNewAdvTargetAppointments] = useState<number>(3);
+
+  // Edit password state
+  const [editingPasswordUserId, setEditingPasswordUserId] = useState<string | null>(null);
+  const [tempNewPassword, setTempNewPassword] = useState('');
 
   // Cloud Config state
   const [cloudConfig, setCloudConfig] = useState<CloudSyncConfig>(() => storage.getCloudConfig());
@@ -120,14 +126,19 @@ export const AdminView: React.FC<AdminViewProps> = ({
   // Create Salesperson Handler
   const handleCreateSalesperson = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAdvName.trim() || !newAdvEmail.trim()) {
-      alert('Ingresa el nombre y correo del vendedor.');
+    if (!newAdvName.trim()) {
+      alert('Ingresa el nombre del vendedor.');
       return;
     }
 
+    const generatedUsername = newAdvUsername.trim() || newAdvName.trim().toLowerCase().split(' ')[0] + Math.floor(Math.random() * 90 + 10);
+    const generatedEmail = newAdvEmail.trim().toLowerCase() || `${generatedUsername}@funeraleshernandez.com`;
+
     storage.createUser({
       name: newAdvName.trim(),
-      email: newAdvEmail.trim().toLowerCase(),
+      username: generatedUsername,
+      password: newAdvPassword.trim() || '123',
+      email: generatedEmail,
       phone: newAdvPhone.trim() || '4420000000',
       branch: newAdvBranch,
       role: newAdvRole,
@@ -141,9 +152,25 @@ export const AdminView: React.FC<AdminViewProps> = ({
     onRefreshData();
     setIsCreatingAdvisor(false);
     setNewAdvName('');
+    setNewAdvUsername('');
+    setNewAdvPassword('123');
     setNewAdvEmail('');
     setNewAdvPhone('');
-    onShowToast(`Vendedor "${newAdvName.trim()}" creado exitosamente.`);
+    onShowToast(`Vendedor "${newAdvName.trim()}" dado de alta exitosamente con usuario: ${generatedUsername}`);
+  };
+
+  const handleUpdatePassword = (userId: string) => {
+    const user = allUsers.find(u => u.id === userId);
+    if (user && tempNewPassword.trim()) {
+      storage.updateUser({
+        ...user,
+        password: tempNewPassword.trim()
+      });
+      setEditingPasswordUserId(null);
+      setTempNewPassword('');
+      onRefreshData();
+      onShowToast(`Contraseña actualizada para ${user.name}`);
+    }
   };
 
   const handleToggleUserActive = (userId: string) => {
@@ -855,16 +882,42 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                     type="text"
                     required
                     value={newAdvName}
-                    onChange={(e) => setNewAdvName(e.target.value)}
+                    onChange={(e) => {
+                      setNewAdvName(e.target.value);
+                      if (!newAdvUsername) {
+                        setNewAdvUsername(e.target.value.toLowerCase().replace(/\s+/g, '.'));
+                      }
+                    }}
                     placeholder="Ej. Martín Guerrero Pérez"
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-slate-400 block mb-1">Correo Institucional *</label>
+                  <label className="text-[10px] text-slate-400 block mb-1">Usuario de Acceso *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAdvUsername}
+                    onChange={(e) => setNewAdvUsername(e.target.value.toLowerCase().trim())}
+                    placeholder="Ej. martin.guerrero o mguerrero"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Contraseña Inicial *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAdvPassword}
+                    onChange={(e) => setNewAdvPassword(e.target.value)}
+                    placeholder="Contraseña para que entre"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Correo Institucional (opcional)</label>
                   <input
                     type="email"
-                    required
                     value={newAdvEmail}
                     onChange={(e) => setNewAdvEmail(e.target.value)}
                     placeholder="martin.guerrero@funeraleshernandez.com"
@@ -956,10 +1009,56 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                           {adv.active ? 'Activo' : 'Inactivo'}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[10px] text-slate-300 flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span>Usuario: <strong className="font-mono text-amber-300">{adv.username || adv.email.split('@')[0]}</strong></span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          Clave: 
+                          {editingPasswordUserId === adv.id ? (
+                            <span className="inline-flex items-center gap-1">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={tempNewPassword}
+                                onChange={(e) => setTempNewPassword(e.target.value)}
+                                placeholder="Nueva clave"
+                                className="bg-slate-900 border border-amber-400 rounded px-1.5 py-0.5 text-[10px] font-mono text-white w-24"
+                              />
+                              <button
+                                onClick={() => handleUpdatePassword(adv.id)}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold"
+                              >
+                                Guardar
+                              </button>
+                              <button
+                                onClick={() => setEditingPasswordUserId(null)}
+                                className="bg-slate-700 text-slate-300 px-1 py-0.5 rounded text-[10px]"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <strong className="font-mono text-white bg-slate-900 px-1.5 py-0.2 rounded border border-slate-750">
+                                {adv.password || '123'}
+                              </strong>
+                              <button
+                                onClick={() => {
+                                  setEditingPasswordUserId(adv.id);
+                                  setTempNewPassword(adv.password || '123');
+                                }}
+                                className="text-[9px] text-amber-400 hover:underline ml-0.5"
+                              >
+                                [Editar]
+                              </button>
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         {branch?.shortName} • {adv.email} • Tel: {adv.phone}
                       </div>
-                      <div className="text-[10px] text-amber-400 mt-0.5">
+                      <div className="text-[10px] text-amber-400/90 mt-0.5">
                         Metas: {adv.targetDailyContacts || 20} contactos / {adv.targetDailyAppointments || 3} citas día
                       </div>
                     </div>

@@ -204,37 +204,48 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
 
-                <div className="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                  {isExecutivePortal ? 'Cuentas Registradas' : 'Cambiar Asesor en Turno'}
-                </div>
+                {/* In Executive portal, allow owner to see registered accounts; for normal advisors, ONLY show their profile and logout */}
+                {isExecutivePortal ? (
+                  <>
+                    <div className="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                      Cuentas Registradas
+                    </div>
 
-                {visibleUsers.map((u) => {
-                  const isSelected = currentUser.id === u.id;
-                  const branchInfo = branches.find(b => b.id === u.branch);
+                    {visibleUsers.map((u) => {
+                      const isSelected = currentUser.id === u.id;
+                      const branchInfo = branches.find(b => b.id === u.branch);
 
-                  return (
-                    <button
-                      key={u.id}
-                      onClick={() => handleSelectUser(u.id)}
-                      className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
-                        isSelected ? 'bg-amber-500/10 text-amber-400 font-semibold' : 'text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border bg-slate-800 text-slate-300 border-slate-700">
-                          {u.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-white">{u.name}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {u.role === 'super_admin' ? 'Dueño' : `Asesor • ${branchInfo?.shortName || ''}`}
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => handleSelectUser(u.id)}
+                          className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 transition-colors ${
+                            isSelected ? 'bg-amber-500/10 text-amber-400 font-semibold' : 'text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border bg-slate-800 text-slate-300 border-slate-700">
+                              {u.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="text-xs font-medium text-white">{u.name}</div>
+                              <div className="text-[10px] text-slate-400">
+                                {u.role === 'super_admin' ? 'Dueño' : `Asesor • ${branchInfo?.shortName || ''}`}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
-                    </button>
-                  );
-                })}
+                          {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-slate-400 space-y-1">
+                    <div>Usuario: <strong className="text-white font-mono">{currentUser.username || currentUser.email.split('@')[0]}</strong></div>
+                    <div>Correo: <span className="text-slate-300">{currentUser.email}</span></div>
+                    <div className="text-[10px] text-amber-400">Sesión comercial activa y segura</div>
+                  </div>
+                )}
 
                 {onLogout && (
                   <div className="p-1 border-t border-slate-800 mt-1">

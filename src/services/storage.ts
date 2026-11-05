@@ -100,6 +100,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_dueno',
     name: 'Don Fernando Hernández',
+    username: 'fernando',
+    password: '7788',
     email: 'fernando.dueno@funeraleshernandez.com',
     role: 'super_admin',
     branch: 'sucursal_1',
@@ -111,6 +113,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_admin',
     name: 'Lic. Patricia Hernández',
+    username: 'patricia',
+    password: '7788',
     email: 'patricia.hernandez@funeraleshernandez.com',
     role: 'admin',
     branch: 'sucursal_1',
@@ -122,6 +126,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_carlos',
     name: 'Carlos Mendoza',
+    username: 'carlos',
+    password: '123',
     email: 'carlos.mendoza@funeraleshernandez.com',
     role: 'asesor',
     branch: 'sucursal_1',
@@ -135,6 +141,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_laura',
     name: 'Laura Benítez',
+    username: 'laura',
+    password: '123',
     email: 'laura.benitez@funeraleshernandez.com',
     role: 'asesor',
     branch: 'sucursal_2',
@@ -148,6 +156,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_roberto',
     name: 'Roberto Sánchez',
+    username: 'roberto',
+    password: '123',
     email: 'roberto.sanchez@funeraleshernandez.com',
     role: 'asesor',
     branch: 'sucursal_1',
@@ -545,11 +555,24 @@ class StorageService {
   }
 
   public initialize(): void {
-    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+    const existingUsers = this.getItem<User[] | null>(STORAGE_KEYS.USERS, null);
+    if (!existingUsers) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
+    } else {
+      // Ensure all users have username and password
+      const updated = existingUsers.map(u => {
+        const init = INITIAL_USERS.find(iu => iu.id === u.id);
+        return {
+          ...u,
+          username: u.username || init?.username || u.email.split('@')[0],
+          password: u.password || init?.password || '123'
+        };
+      });
+      this.setItem(STORAGE_KEYS.USERS, updated);
     }
+
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
+      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2]);
     }
     if (!localStorage.getItem(STORAGE_KEYS.BRANCHES)) {
       this.setItem(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
@@ -583,7 +606,7 @@ class StorageService {
   }
 
   public getCurrentUser(): User {
-    return this.getItem<User>(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
+    return this.getItem<User>(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2]);
   }
 
   public setCurrentUser(user: User): void {
@@ -607,6 +630,25 @@ class StorageService {
     users.push(newUser);
     this.setItem(STORAGE_KEYS.USERS, users);
     return newUser;
+  }
+
+  public authenticateAdvisor(loginOrEmail: string, passwordAttempt: string): User | null {
+    const users = this.getUsers();
+    const cleanInput = loginOrEmail.trim().toLowerCase();
+    const cleanPass = passwordAttempt.trim();
+
+    const user = users.find(u => 
+      u.role === 'asesor' && 
+      u.active && 
+      (u.email.toLowerCase() === cleanInput || (u.username && u.username.toLowerCase() === cleanInput))
+    );
+
+    if (!user) return null;
+    const validPassword = user.password || '123';
+    if (validPassword === cleanPass) {
+      return user;
+    }
+    return null;
   }
 
   public toggleUserStatus(userId: string): void {

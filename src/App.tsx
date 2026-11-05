@@ -24,10 +24,9 @@ export const App: React.FC = () => {
     return sessionStorage.getItem('fh_admin_auth') === 'true';
   });
 
-  // Advisor login state
+  // Advisor login state strictly based on active sessionStorage
   const [isAdvisorLoggedIn, setIsAdvisorLoggedIn] = useState<boolean>(() => {
-    // By default, if currentUser is an advisor and not visiting /admin, keep logged in or check storage
-    return currentUser.role === 'asesor';
+    return Boolean(sessionStorage.getItem('fh_advisor_session'));
   });
 
   const [activeTab, setActiveTab] = useState<NavTab>('hoy');
@@ -124,6 +123,7 @@ export const App: React.FC = () => {
 
   const handleAdvisorLogout = () => {
     setIsAdvisorLoggedIn(false);
+    sessionStorage.removeItem('fh_advisor_session');
     navigateTo('/login');
   };
 
