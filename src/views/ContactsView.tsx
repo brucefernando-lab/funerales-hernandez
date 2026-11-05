@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Contact, ContactSource, ContactStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { Search, Phone, MessageCircle, Plus, Users, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { storage } from '../services/storage';
+import { Search, Phone, MessageCircle, Plus, Users, UserCheck, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
 
 interface ContactsViewProps {
   contacts: Contact[];
@@ -19,8 +20,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [sourceFilter, setSourceFilter] = useState<string>('todos');
 
-  // Filter contacts belonging to current advisor
-  const userContacts = contacts.filter(c => c.userId === currentUser.id);
+  // Filter contacts belonging to current advisor (excluding archived/deleted by advisor)
+  const userContacts = contacts.filter(c => c.userId === currentUser.id && !c.deletedByAdvisor);
 
   const filtered = userContacts.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
@@ -164,6 +165,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   >
                     <Plus className="w-3.5 h-3.5 text-amber-400" />
                     <span>Actividad</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (confirm(`¿Deseas descartar el prospecto "${contact.name}" de tu agenda activa?`)) {
+                        storage.softDeleteContact(contact.id);
+                      }
+                    }}
+                    className="p-2 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 rounded-xl text-xs transition-colors"
+                    title="Descartar de mi lista activa (se conserva para la empresa)"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

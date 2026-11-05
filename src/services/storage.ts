@@ -2,6 +2,13 @@ import {
   User, Contact, Activity, TaskPending, Sale, 
   FuneralPackage, Branch, BranchId, DailyReport, CloudSyncConfig 
 } from '../types';
+import { 
+  syncContactToCloud, 
+  syncActivityToCloud, 
+  syncTaskToCloud, 
+  syncUserToCloud, 
+  pullCloudData 
+} from './supabaseClient';
 
 const STORAGE_KEYS = {
   USERS: 'fh_users_v2',
@@ -282,8 +289,8 @@ export const INITIAL_DAILY_REPORTS: DailyReport[] = [];
 export const INITIAL_CLOUD_CONFIG: CloudSyncConfig = {
   enabled: true,
   provider: 'supabase',
-  supabaseUrl: 'https://vkmuxydfnhhernandez.supabase.co',
-  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.funerales-hernandez-crm-cloud',
+  supabaseUrl: 'https://liomjpoclsdxcjnnxqhi.supabase.co',
+  supabaseAnonKey: 'sb_publishable_VHM7zdpXTaP4UAlUsxwmjQ_m3GxYih9',
   lastSyncedAt: new Date().toISOString(),
   autoSyncIntervalMs: 30000,
   syncStatus: 'connected'
@@ -369,9 +376,11 @@ class StorageService {
     const rpts = this.getItem<DailyReport[]>(STORAGE_KEYS.DAILY_REPORTS, []).filter(r => !dummyIds.includes(r.userId));
     this.setItem(STORAGE_KEYS.DAILY_REPORTS, rpts);
 
-    if (!localStorage.getItem(STORAGE_KEYS.CLOUD_CONFIG)) {
-      this.setItem(STORAGE_KEYS.CLOUD_CONFIG, INITIAL_CLOUD_CONFIG);
-    }
+    this.setItem(STORAGE_KEYS.CLOUD_CONFIG, INITIAL_CLOUD_CONFIG);
+    
+    // Background initial sync of users & pull cloud data
+    INITIAL_USERS.forEach(u => syncUserToCloud(u));
+    this.syncAllWithCloud();
   }
 
   // Users & Auth
@@ -432,6 +441,29 @@ class StorageService {
 
     if (!user) return null;
     const validPassword = user.password || '123';
+    if (validPassword === cleanPass) {
+      return user;
+    }
+    return null;
+  }
+
+  public authenticateUser(loginOrEmail: string, passwordAttempt: string): User | null {
+    const users = this.getUsers();
+    const cleanInput = loginOrEmail.trim().toLowerCase();
+    const cleanPass = passwordAttempt.trim();
+
+    const user = users.find(u => {
+      if (!u.active) return false;
+      const emailMatch = u.email.toLowerCase() === cleanInput;
+      const usernameMatch = Boolean(u.username && u.username.toLowerCase() === cleanInput);
+      const nameMatch = u.name.toLowerCase() === cleanInput;
+      const firstNameMatch = u.name.toLowerCase().split(' ')[0] === cleanInput;
+      const userPrefixMatch = Boolean(u.username && u.username.toLowerCase().split('.')[0] === cleanInput);
+      return emailMatch || usernameMatch || nameMatch || firstNameMatch || userPrefixMatch;
+    });
+
+    if (!user) return null;
+    const validPassword = user.password || (user.role === 'asesor' ? '123' : 'admin123');
     if (validPassword === cleanPass) {
       return user;
     }
@@ -526,6 +558,24 @@ class StorageService {
       list.unshift(contact);
     }
     this.setItem(STORAGE_KEYS.CONTACTS, list);
+    // Background cloud sync to Supabase
+    syncContactToCloud(contact);
+  }
+
+  // Soft delete: hides from advisor, preserves forever for owners/admin
+  public softDeleteContact(contactId: string): void {
+    const list = this.getContacts();
+    const idx = list.findIndex(c => c.id === contactId);
+    if (idx >= 0) {
+      const updated: Contact = {
+        ...list[idx],
+        deletedByAdvisor: true,
+        deletedAt: new Date().toISOString()
+      };
+      list[idx] = updated;
+      this.setItem(STORAGE_KEYS.CONTACTS, list);
+      syncContactToCloud(updated);
+    }
   }
 
   // Activities
@@ -537,6 +587,8 @@ class StorageService {
     const list = this.getActivities();
     list.unshift(activity);
     this.setItem(STORAGE_KEYS.ACTIVITIES, list);
+    // Background cloud sync to Supabase
+    syncActivityToCloud(activity);
   }
 
   // Tasks
@@ -553,6 +605,38 @@ class StorageService {
       list.unshift(task);
     }
     this.setItem(STORAGE_KEYS.TASKS, list);
+    // Background cloud sync to Supabase
+    syncTaskToCloud(task);
+  }
+
+  // Bidirectional Cloud Synchronization
+  public async syncAllWithCloud(): Promise<void> {
+    const cloud = await pullCloudData();
+    if (!cloud) return;
+
+    if (cloud.contacts.length > 0) {
+      const local = this.getContacts();
+      const mergedMap = new Map<string, Contact>();
+      local.forEach(c => mergedMap.set(c.id, c));
+      cloud.contacts.forEach(c => mergedMap.set(c.id, c));
+      this.setItem(STORAGE_KEYS.CONTACTS, Array.from(mergedMap.values()));
+    }
+
+    if (cloud.activities.length > 0) {
+      const local = this.getActivities();
+      const mergedMap = new Map<string, Activity>();
+      local.forEach(a => mergedMap.set(a.id, a));
+      cloud.activities.forEach(a => mergedMap.set(a.id, a));
+      this.setItem(STORAGE_KEYS.ACTIVITIES, Array.from(mergedMap.values()));
+    }
+
+    if (cloud.tasks.length > 0) {
+      const local = this.getTasks();
+      const mergedMap = new Map<string, TaskPending>();
+      local.forEach(t => mergedMap.set(t.id, t));
+      cloud.tasks.forEach(t => mergedMap.set(t.id, t));
+      this.setItem(STORAGE_KEYS.TASKS, Array.from(mergedMap.values()));
+    }
   }
 
   public completeTask(taskId: string): void {

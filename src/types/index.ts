@@ -48,6 +48,8 @@ export interface Contact {
   source: ContactSource;
   status: ContactStatus;
   createdAt: string;
+  deletedByAdvisor?: boolean;
+  deletedAt?: string;
   notes?: string;
   lastInteraction?: string;
   preferredPackageId?: string;

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { storage } from '../services/storage';
+import { User } from '../types';
 import { Lock, User as UserIcon, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface AdvisorLoginViewProps {
-  onSuccess: () => void;
+  onSuccess: (user: User) => void;
 }
 
 export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess }) => {
@@ -30,18 +31,16 @@ export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess })
     setIsLoading(true);
 
     setTimeout(() => {
-      const authenticatedUser = storage.authenticateAdvisor(cleanUser, cleanPass);
+      const authenticatedUser = storage.authenticateUser(cleanUser, cleanPass);
 
       if (authenticatedUser) {
-        // Save session strictly in sessionStorage
-        sessionStorage.setItem('fh_advisor_session', authenticatedUser.id);
         setCurrentUser(authenticatedUser);
         setError('');
         setIsLoading(false);
-        onSuccess();
+        onSuccess(authenticatedUser);
       } else {
         setIsLoading(false);
-        setError('Usuario o contraseña incorrectos. Si no tienes tus accesos, solicítalos a Dirección General.');
+        setError('Usuario o contraseña incorrectos. Verifica tus credenciales asignadas.');
       }
     }, 250);
   };
@@ -61,19 +60,19 @@ export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess })
           </div>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Sistema Comercial de Previsión</span>
+            <span>Portal Unificado • Previsión y Dirección</span>
           </span>
           <p className="text-xs text-slate-400 font-medium">
-            Programa de Acompañamiento 90 Días
+            Acceso para Asesores Comerciales y Dirección General
           </p>
         </div>
 
         {/* Strict Credentials Form */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
           <div className="border-b border-slate-800 pb-2">
-            <h2 className="text-sm font-bold text-white font-serif">Acceso a Plataforma</h2>
+            <h2 className="text-sm font-bold text-white font-serif">Iniciar Sesión</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Ingresa el usuario y contraseña asignados por la administración.
+              Ingresa tus credenciales personales para acceder a tu panel.
             </p>
           </div>
 

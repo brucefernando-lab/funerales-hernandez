@@ -37,7 +37,27 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [timeframe, setTimeframe] = useState<Timeframe>('semana');
 
   // Sub-tabs: 'tablero' | 'radar' | 'cortes' | 'vendedores' | 'nube' | 'configuracion'
-  const [activeSubTab, setActiveSubTab] = useState<'tablero' | 'radar' | 'cortes' | 'vendedores' | 'nube' | 'configuracion'>('tablero');
+  const [activeSubTab, setActiveSubTab] = useState<'tablero' | 'radar' | 'cortes' | 'cartera' | 'vendedores' | 'nube' | 'configuracion'>('tablero');
+
+  // Cartera & Blindaje Anti-Borrado State
+  const [contactsSearch, setContactsSearch] = useState('');
+  const [contactsFilter, setContactsFilter] = useState<'todos' | 'activos' | 'eliminados'>('todos');
+  const [selectedContactAdvisorId, setSelectedContactAdvisorId] = useState<string>('todos');
+
+  const handleRestoreContact = (contactId: string) => {
+    const allContacts = storage.getContacts();
+    const contact = allContacts.find(c => c.id === contactId);
+    if (contact) {
+      const restored = {
+        ...contact,
+        deletedByAdvisor: false,
+        deletedAt: undefined
+      };
+      storage.saveContact(restored);
+      onRefreshData();
+      onShowToast(`Prospecto "${contact.name}" reactivado con éxito en la cartera del asesor.`);
+    }
+  };
 
   // State for creating new salesperson
   const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false);
@@ -458,6 +478,18 @@ CREATE TABLE IF NOT EXISTS daily_reports (
         >
           <ClipboardCheck className="w-3.5 h-3.5" />
           <span>Cortes Diarios</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('cartera')}
+          className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeSubTab === 'cartera'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Cartera & Blindaje</span>
         </button>
 
         <button
@@ -924,6 +956,210 @@ CREATE TABLE IF NOT EXISTS daily_reports (
           </div>
         </div>
       )}
+
+      {/* SUBTAB: CARTERA & BLINDAJE ANTI-BORRADO */}
+      {activeSubTab === 'cartera' && (() => {
+        const allContacts = storage.getContacts();
+        const activeContactsCount = allContacts.filter(c => !c.deletedByAdvisor).length;
+        const deletedContactsCount = allContacts.filter(c => c.deletedByAdvisor).length;
+
+        let filtered = allContacts;
+        if (contactsFilter === 'activos') {
+          filtered = filtered.filter(c => !c.deletedByAdvisor);
+        } else if (contactsFilter === 'eliminados') {
+          filtered = filtered.filter(c => c.deletedByAdvisor);
+        }
+
+        if (selectedContactAdvisorId !== 'todos') {
+          filtered = filtered.filter(c => c.userId === selectedContactAdvisorId);
+        }
+
+        if (contactsSearch.trim()) {
+          const q = contactsSearch.toLowerCase();
+          filtered = filtered.filter(c => 
+            c.name.toLowerCase().includes(q) || 
+            c.phone.includes(q)
+          );
+        }
+
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Blindaje de Cartera y Prospectos
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Histórico permanente de la empresa. Ningún prospecto se pierde aunque un vendedor lo descarte de su CRM.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 self-start sm:self-auto">
+                <Cloud className="w-3.5 h-3.5" />
+                Sincronizado con Supabase Cloud
+              </span>
+            </div>
+
+            {/* Metric KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total en Base de Datos</span>
+                <span className="text-xl font-bold font-mono text-white mt-0.5 block">{allContacts.length}</span>
+                <span className="text-[10px] text-slate-500">Patrimonio comercial histórico</span>
+              </div>
+
+              <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3">
+                <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Activos en CRM Vendedores</span>
+                <span className="text-xl font-bold font-mono text-emerald-400 mt-0.5 block">{activeContactsCount}</span>
+                <span className="text-[10px] text-emerald-500/70">En seguimiento comercial vivo</span>
+              </div>
+
+              <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3">
+                <span className="text-[10px] text-amber-400 uppercase font-semibold block flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-amber-400" />
+                  Protegidos (Descartados)
+                </span>
+                <span className="text-xl font-bold font-mono text-amber-400 mt-0.5 block">{deletedContactsCount}</span>
+                <span className="text-[10px] text-amber-500/70">Ocultos al vendedor, resguardados para dueños</span>
+              </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Buscar por Nombre o Teléfono:</label>
+                <input
+                  type="text"
+                  value={contactsSearch}
+                  onChange={(e) => setContactsSearch(e.target.value)}
+                  placeholder="Ej. Carlos, 867..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Filtrar por Estatus:</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'todos', label: 'Todos' },
+                    { id: 'activos', label: 'Activos' },
+                    { id: 'eliminados', label: 'Descartados' }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setContactsFilter(f.id as any)}
+                      className={`py-1.5 rounded text-center text-[11px] font-medium transition-colors ${
+                        contactsFilter === f.id
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Vendedor Asignado:</label>
+                <select
+                  value={selectedContactAdvisorId}
+                  onChange={(e) => setSelectedContactAdvisorId(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                >
+                  <option value="todos">Todos los Vendedores ({advisors.length})</option>
+                  {advisors.map(adv => (
+                    <option key={adv.id} value={adv.id}>{adv.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Contacts Table / Cards */}
+            <div className="space-y-2">
+              {filtered.length === 0 ? (
+                <div className="text-center py-8 bg-slate-800/20 rounded-xl border border-dashed border-slate-800 text-xs text-slate-500">
+                  No se encontraron prospectos con los filtros seleccionados.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {filtered.map(contact => {
+                    const advisor = allUsers.find(u => u.id === contact.userId);
+                    const isDeleted = Boolean(contact.deletedByAdvisor);
+
+                    return (
+                      <div
+                        key={contact.id}
+                        className={`rounded-xl p-3 border transition-all ${
+                          isDeleted
+                            ? 'bg-amber-950/10 border-amber-500/30'
+                            : 'bg-slate-800/40 border-slate-700/60'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-bold text-white font-serif">
+                                {contact.name}
+                              </h4>
+                              {isDeleted ? (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <ShieldCheck className="w-3 h-3" />
+                                  Resguardado (Descartado por asesor)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  Activo en CRM
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-300 font-mono">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <a href={`tel:${contact.phone}`} className="hover:text-amber-400 underline">
+                                {contact.phone}
+                              </a>
+                            </div>
+                          </div>
+
+                          {isDeleted && (
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreContact(contact.id)}
+                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow flex items-center gap-1 shrink-0"
+                              title="Regresar prospecto a la cartera activa del asesor"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              Reactivar
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-2 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2">
+                          <div>
+                            <span className="text-slate-500">Asesor: </span>
+                            <span className="text-white font-medium">{advisor ? advisor.name : 'No asignado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Estatus: </span>
+                            <span className="capitalize text-amber-400/90 font-semibold">{contact.status}</span>
+                          </div>
+                          {contact.deletedAt && (
+                            <div className="text-amber-400/80 text-[9px]">
+                              Descartado: {contact.deletedAt.split('T')[0]}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 4. SUBTAB: GESTIÓN DE ASESORES */}
       {activeSubTab === 'vendedores' && (
