@@ -57,7 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-white px-3.5 md:px-6 py-2.5 shadow-md">
-      <div className="max-w-md md:max-w-6xl lg:max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <div className="max-w-md md:max-w-6xl lg:max-w-7xl mx-auto space-y-2">
+        <div className="flex items-center justify-between gap-4">
         
         {/* Brand Logo & Tag */}
         <div className="flex items-center gap-3 shrink-0">
@@ -266,6 +267,31 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
         </div>
+        </div>
+
+        {/* Mobile Navigation Tabs for Executive Portal (Visible on screens < 768px) */}
+        {isExecutivePortal && onTabChange && (
+          <div className="flex md:hidden items-center justify-between gap-1 w-full pt-1.5 border-t border-slate-800/80">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange(item.id)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </header>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Calculator, CheckSquare, Plus, BarChart3, Users } from 'lucide-react';
+import { Calendar, Calculator, CheckSquare, Plus, BarChart3, Users, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export type NavTab = 'hoy' | 'cotizador' | 'pendientes' | 'metricas' | 'contactos' | 'admin';
@@ -7,16 +7,75 @@ export type NavTab = 'hoy' | 'cotizador' | 'pendientes' | 'metricas' | 'contacto
 interface BottomNavProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
-  onOpenQuickCapture: () => void;
-  pendingTasksCount: number;
+  onOpenQuickCapture?: () => void;
+  pendingTasksCount?: number;
+  isExecutivePortal?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   onTabChange,
   onOpenQuickCapture,
-  pendingTasksCount
+  pendingTasksCount = 0,
+  isExecutivePortal = false
 }) => {
+  // Mobile navigation for Executive Portal (Owners & Leadership)
+  if (isExecutivePortal) {
+    return (
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/98 backdrop-blur-lg border-t border-slate-800 pb-safe shadow-2xl">
+        <div className="max-w-md mx-auto px-3 py-1.5 flex items-center justify-around">
+          {/* Tab 1: Panel Dirección */}
+          <button
+            onClick={() => onTabChange('admin')}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+              activeTab === 'admin'
+                ? 'text-amber-400 scale-105 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Dirección</span>
+            {activeTab === 'admin' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
+            )}
+          </button>
+
+          {/* Tab 2: Catálogo de Precios */}
+          <button
+            onClick={() => onTabChange('cotizador')}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+              activeTab === 'cotizador'
+                ? 'text-amber-400 scale-105 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calculator className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Catálogo Precios</span>
+            {activeTab === 'cotizador' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
+            )}
+          </button>
+
+          {/* Tab 3: Métricas Totales */}
+          <button
+            onClick={() => onTabChange('metricas')}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+              activeTab === 'metricas'
+                ? 'text-amber-400 scale-105 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Métricas Totales</span>
+            {activeTab === 'metricas' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
+            )}
+          </button>
+        </div>
+      </nav>
+    );
+  }
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 pb-safe">
       <div className="max-w-md mx-auto px-1 py-1 flex items-center justify-around relative">

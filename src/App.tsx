@@ -192,14 +192,19 @@ export const App: React.FC = () => {
         
         <Header 
           onLogout={handleLogout}
-          activeTab={activeTab === 'cotizador' ? 'cotizador' : 'admin'}
+          activeTab={activeTab === 'cotizador' ? 'cotizador' : activeTab === 'metricas' ? 'metricas' : 'admin'}
           onTabChange={(tab) => setActiveTab(tab)}
           isExecutivePortal={true}
         />
 
-        <main className="flex-1 max-w-md md:max-w-6xl lg:max-w-7xl w-full mx-auto px-3.5 md:px-6 pt-3.5 md:pt-6 pb-12">
+        <main className="flex-1 max-w-md md:max-w-6xl lg:max-w-7xl w-full mx-auto px-3.5 md:px-6 pt-3.5 md:pt-6 pb-24 md:pb-12">
           {activeTab === 'cotizador' ? (
             <CotizadorView />
+          ) : activeTab === 'metricas' ? (
+            <MetricsView
+              activities={activities}
+              sales={sales}
+            />
           ) : (
             <AdminView
               activities={activities}
@@ -209,6 +214,13 @@ export const App: React.FC = () => {
             />
           )}
         </main>
+
+        {/* Mobile Navigation for Executive Portal */}
+        <BottomNav
+          activeTab={activeTab === 'cotizador' ? 'cotizador' : activeTab === 'metricas' ? 'metricas' : 'admin'}
+          onTabChange={(tab) => setActiveTab(tab)}
+          isExecutivePortal={true}
+        />
       </div>
     );
   }
