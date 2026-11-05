@@ -8,15 +8,28 @@ import { TasksView } from './views/TasksView';
 import { MetricsView } from './views/MetricsView';
 import { ContactsView } from './views/ContactsView';
 import { AdminView } from './views/AdminView';
-import { LoginView } from './views/LoginView';
+import { AdvisorLoginView } from './views/AdvisorLoginView';
+import { AdminLoginView } from './views/AdminLoginView';
 import { ModalQuickCapture, InitialPackageData } from './components/ModalQuickCapture';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { storage, getTodayDateString } from './services/storage';
 import { TaskPending, Activity, Sale, Contact } from './types';
 
 export const App: React.FC = () => {
-  const { currentUser } = useAuth();
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const { currentUser, allUsers, switchDemoUser } = useAuth();
+  
+  // URL Routing state
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname.toLowerCase());
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return sessionStorage.getItem('fh_admin_auth') === 'true';
+  });
+
+  // Advisor login state
+  const [isAdvisorLoggedIn, setIsAdvisorLoggedIn] = useState<boolean>(() => {
+    // By default, if currentUser is an advisor and not visiting /admin, keep logged in or check storage
+    return currentUser.role === 'asesor';
+  });
+
   const [activeTab, setActiveTab] = useState<NavTab>('hoy');
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [captureInitialContact, setCaptureInitialContact] = useState<{ id?: string; name: string; phone: string } | undefined>(undefined);
@@ -28,6 +41,19 @@ export const App: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const navigateTo = (path: string) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path.toLowerCase());
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname.toLowerCase());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const loadData = () => {
     setTasks(storage.getTasks());
@@ -47,14 +73,6 @@ export const App: React.FC = () => {
     window.addEventListener('fh_storage_change', handleStorageChange);
     return () => window.removeEventListener('fh_storage_change', handleStorageChange);
   }, []);
-
-  // When switching to an admin or super_admin user, if on advisor-only tab, keep it smooth
-  useEffect(() => {
-    const isLeadership = currentUser.role === 'admin' || currentUser.role === 'super_admin';
-    if (isLeadership && activeTab === 'contactos') {
-      setActiveTab('admin');
-    }
-  }, [currentUser]);
 
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
     const newToast: ToastMessage = {
@@ -104,29 +122,114 @@ export const App: React.FC = () => {
     showToast('Pendiente reprogramado', `Nueva fecha: ${newDate} a las ${newTime}`, 'info');
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
+  const handleAdvisorLogout = () => {
+    setIsAdvisorLoggedIn(false);
+    navigateTo('/login');
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    sessionStorage.removeItem('fh_admin_auth');
+    // Switch to first advisor for safety
+    const firstAdvisor = allUsers.find(u => u.role === 'asesor');
+    if (firstAdvisor) switchDemoUser(firstAdvisor.id);
+    navigateTo('/admin');
   };
 
   const todayStr = getTodayDateString();
   const pendingCount = tasks.filter(t => t.userId === currentUser.id && !t.isCompleted && t.dueDate <= todayStr).length;
 
-  if (!isLoggedIn) {
-    return <LoginView onSuccess={() => setIsLoggedIn(true)} />;
+  // ROUTE 1: /admin (Exclusive URL for Owners & Leadership)
+  const isAdminRoute = currentPath.startsWith('/admin');
+
+  if (isAdminRoute) {
+    if (!isAdminAuthenticated) {
+      return (
+        <AdminLoginView
+          onSuccess={() => {
+            setIsAdminAuthenticated(true);
+            sessionStorage.setItem('fh_admin_auth', 'true');
+            const owner = allUsers.find(u => u.role === 'super_admin');
+            if (owner) switchDemoUser(owner.id);
+          }}
+          onGoToAdvisorLogin={() => navigateTo('/login')}
+        />
+      );
+    }
+
+    // Authenticated Executive Panel
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans selection:bg-amber-600 selection:text-white">
+        <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+        
+        <Header 
+          onLogout={handleAdminLogout}
+          activeTab={activeTab === 'cotizador' ? 'cotizador' : 'admin'}
+          onTabChange={(tab) => setActiveTab(tab)}
+          isExecutivePortal={true}
+          onGoToAdvisorPortal={() => {
+            const firstAdv = allUsers.find(u => u.role === 'asesor');
+            if (firstAdv) switchDemoUser(firstAdv.id);
+            setIsAdvisorLoggedIn(true);
+            navigateTo('/login');
+          }}
+        />
+
+        <main className="flex-1 max-w-md md:max-w-6xl lg:max-w-7xl w-full mx-auto px-3.5 md:px-6 pt-3.5 md:pt-6 pb-12">
+          {activeTab === 'cotizador' ? (
+            <CotizadorView />
+          ) : (
+            <AdminView
+              activities={activities}
+              sales={sales}
+              onRefreshData={loadData}
+              onShowToast={(msg) => showToast('Sistema Actualizado', msg, 'success')}
+            />
+          )}
+        </main>
+      </div>
+    );
   }
 
+  // ROUTE 2: /login (Dedicated URL for Sales Advisors)
+  const isLoginRoute = currentPath.startsWith('/login');
+
+  if (isLoginRoute && !isAdvisorLoggedIn) {
+    return (
+      <AdvisorLoginView
+        onSuccess={() => {
+          setIsAdvisorLoggedIn(true);
+          navigateTo('/');
+        }}
+      />
+    );
+  }
+
+  // If on root "/" and not logged in as advisor, show advisor login
+  if (!isAdvisorLoggedIn) {
+    return (
+      <AdvisorLoginView
+        onSuccess={() => {
+          setIsAdvisorLoggedIn(true);
+        }}
+      />
+    );
+  }
+
+  // ROUTE 3: "/" Normal Sales Advisor Workspace (Zero traces of Super Admin)
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans selection:bg-amber-600 selection:text-white">
       {/* Toast notifications container */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
-      {/* Top Header (Includes responsive desktop navigation) */}
+      {/* Top Header (Clean Advisor Mode: No super admin, no owners tab) */}
       <Header 
-        onLogout={handleLogout}
+        onLogout={handleAdvisorLogout}
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         onOpenQuickCapture={() => handleOpenQuickCapture()}
         pendingTasksCount={pendingCount}
+        isExecutivePortal={false}
       />
 
       {/* Main View Area: Responsive for Mobile (Phone) & Desktop (Office PC) */}
@@ -196,18 +299,9 @@ export const App: React.FC = () => {
             onOpenNewCapture={() => handleOpenQuickCapture()}
           />
         )}
-
-        {activeTab === 'admin' && (
-          <AdminView
-            activities={activities}
-            sales={sales}
-            onRefreshData={loadData}
-            onShowToast={(msg) => showToast('Sistema Actualizado', msg, 'success')}
-          />
-        )}
       </main>
 
-      {/* Ergonomic Bottom Navigation Bar (Mobile only, hidden on Desktop) */}
+      {/* Ergonomic Bottom Navigation Bar (Mobile only, strictly advisor options) */}
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}

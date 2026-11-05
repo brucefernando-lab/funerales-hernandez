@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Calculator, CheckSquare, Plus, BarChart3, ShieldCheck, Crown, Users } from 'lucide-react';
+import { Calendar, Calculator, CheckSquare, Plus, BarChart3, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export type NavTab = 'hoy' | 'cotizador' | 'pendientes' | 'metricas' | 'contactos' | 'admin';
@@ -17,10 +17,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onOpenQuickCapture,
   pendingTasksCount
 }) => {
-  const { currentUser } = useAuth();
-  const isSuperAdmin = currentUser.role === 'super_admin';
-  const isAdmin = currentUser.role === 'admin' || isSuperAdmin;
-
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 pb-safe">
       <div className="max-w-md mx-auto px-1 py-1 flex items-center justify-around relative">
@@ -93,44 +89,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           )}
         </button>
 
-        {/* Tab Cartera / Métricas / Dueños */}
-        {isAdmin ? (
-          <button
-            onClick={() => onTabChange('admin')}
-            className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
-              activeTab === 'admin'
-                ? 'text-amber-400 scale-105 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {isSuperAdmin ? (
-              <Crown className="w-5 h-5 mb-0.5 text-amber-400" />
-            ) : (
-              <ShieldCheck className="w-5 h-5 mb-0.5" />
-            )}
-            <span className="text-[10px] tracking-tight">
-              {isSuperAdmin ? 'Dueños' : 'Dirección'}
-            </span>
-            {activeTab === 'admin' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
-            )}
-          </button>
-        ) : (
-          <button
-            onClick={() => onTabChange('metricas')}
-            className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
-              activeTab === 'metricas'
-                ? 'text-amber-400 scale-105 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <BarChart3 className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Métricas</span>
-            {activeTab === 'metricas' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
-            )}
-          </button>
-        )}
+        {/* Tab Métricas (Personal Advisor Performance) */}
+        <button
+          onClick={() => onTabChange('metricas')}
+          className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+            activeTab === 'metricas'
+              ? 'text-amber-400 scale-105 font-semibold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <BarChart3 className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight">Métricas</span>
+          {activeTab === 'metricas' && (
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
+          )}
+        </button>
       </div>
     </nav>
   );
