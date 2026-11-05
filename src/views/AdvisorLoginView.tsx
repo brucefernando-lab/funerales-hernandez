@@ -16,7 +16,7 @@ export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess })
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -30,8 +30,8 @@ export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess })
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const authenticatedUser = storage.authenticateUser(cleanUser, cleanPass);
+    try {
+      const authenticatedUser = await storage.authenticateUserAsync(cleanUser, cleanPass);
 
       if (authenticatedUser) {
         setCurrentUser(authenticatedUser);
@@ -42,7 +42,10 @@ export const AdvisorLoginView: React.FC<AdvisorLoginViewProps> = ({ onSuccess })
         setIsLoading(false);
         setError('Usuario o contraseña incorrectos. Verifica tus credenciales asignadas.');
       }
-    }, 250);
+    } catch {
+      setIsLoading(false);
+      setError('Error al verificar credenciales. Intenta nuevamente.');
+    }
   };
 
   return (

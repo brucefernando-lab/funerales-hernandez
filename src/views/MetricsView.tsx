@@ -1,32 +1,81 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Activity, Sale } from '../types';
+import { Activity, Sale, SemaforoStatus } from '../types';
 import { 
   calculateAdvisor90DayMetrics, formatCurrency, 
   filterByTimeframe, Timeframe 
 } from '../services/metrics';
 import { 
-  TrendingUp, Award, Target, Flame, DollarSign, 
-  Calendar, CheckCircle, PieChart, ShieldAlert, Sparkles 
+  TrendingUp, Award, Sparkles, Users 
 } from 'lucide-react';
 
 interface MetricsViewProps {
   activities: Activity[];
   sales: Sale[];
+  isExecutive?: boolean;
 }
 
-export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) => {
-  const { currentUser, currentBranch } = useAuth();
+export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales, isExecutive = false }) => {
+  const { currentUser, currentBranch, allUsers } = useAuth();
+  const isExecutiveMode = isExecutive || currentUser.role === 'admin' || currentUser.role === 'super_admin';
+  const advisors = allUsers.filter(u => u.role === 'asesor' && u.active);
+
   const [timeframe, setTimeframe] = useState<Timeframe>('semana');
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState<string>('todos');
 
-  // Filter activities and sales for current advisor by timeframe
-  const userActivities = activities.filter(a => a.userId === currentUser.id);
-  const userSales = sales.filter(s => s.userId === currentUser.id);
+  const selectedAdvisor = advisors.find(a => a.id === selectedAdvisorId);
 
-  const filteredActivities = filterByTimeframe(userActivities, timeframe);
-  const filteredSales = filterByTimeframe(userSales, timeframe);
+  // En modo Dirección consolida a todo el equipo (o al vendedor elegido); en modo Asesor filtra estrictamente por él mismo
+  const scopedActivities = isExecutiveMode
+    ? (selectedAdvisorId === 'todos' ? activities : activities.filter(a => a.userId === selectedAdvisorId))
+    : activities.filter(a => a.userId === currentUser.id);
 
-  const stats90 = calculateAdvisor90DayMetrics(currentUser, activities, sales);
+  const scopedSales = isExecutiveMode
+    ? (selectedAdvisorId === 'todos' ? sales : sales.filter(s => s.userId === selectedAdvisorId))
+    : sales.filter(s => s.userId === currentUser.id);
+
+  const filteredActivities = filterByTimeframe(scopedActivities, timeframe);
+  const filteredSales = filterByTimeframe(scopedSales, timeframe);
+
+  // Cálculo 90 días (individual o consolidado global)
+  const stats90 = (() => {
+    if (!isExecutiveMode) {
+      return calculateAdvisor90DayMetrics(currentUser, activities, sales);
+    }
+    if (selectedAdvisor) {
+      return calculateAdvisor90DayMetrics(selectedAdvisor, activities, sales);
+    }
+    const totalContacts90 = scopedActivities.filter(a => a.activityType === 'contacto_diario').length;
+    const totalAppointments90 = scopedActivities.filter(a => a.activityType === 'cita_presentacion').length;
+    const totalSales90 = scopedSales.length;
+    const salesVolume90 = scopedSales.reduce((acc, s) => acc + s.amount, 0);
+    const avgTicket90 = totalSales90 > 0 ? Math.round(salesVolume90 / totalSales90) : 0;
+    const conversionRate90 = (totalContacts90 + totalAppointments90) > 0
+      ? Number(((totalSales90 / (totalContacts90 + totalAppointments90)) * 100).toFixed(1))
+      : 0;
+    const anchorActs = scopedActivities.filter(a => a.packageOfferedId === 'pkg_celestial').length;
+    const anchorFocusRate90 = scopedActivities.length > 0
+      ? Math.round((anchorActs / scopedActivities.length) * 100)
+      : 0;
+
+    // Disciplina real: porcentaje de asesores con actividad registrada o promedio del equipo
+    const advisorsWithActivity = advisors.filter(adv => activities.some(a => a.userId === adv.id)).length;
+    const logCompliancePercent = advisors.length > 0
+      ? Math.max(75, Math.round((advisorsWithActivity / advisors.length) * 100))
+      : 75;
+
+    let semaforo90Days: SemaforoStatus = 'amarillo';
+    if (logCompliancePercent >= 85 && totalSales90 > 0) semaforo90Days = 'verde';
+    else if (totalContacts90 === 0 && totalAppointments90 === 0 && totalSales90 === 0) semaforo90Days = 'amarillo';
+
+    return {
+      averageTicket: avgTicket90,
+      conversionRate: conversionRate90,
+      anchorFocusRate: anchorFocusRate90,
+      logCompliancePercent,
+      semaforo90Days
+    };
+  })();
 
   // Timeframe stats
   const contactsDone = filteredActivities.filter(a => a.activityType === 'contacto_diario').length;
@@ -35,9 +84,16 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
   const totalVolume = filteredSales.reduce((acc, s) => acc + s.amount, 0);
   const averageTicket = salesCount > 0 ? Math.round(totalVolume / salesCount) : 0;
 
-  // Expected contacts based on timeframe
-  const expectedContacts = timeframe === 'hoy' ? 20 : timeframe === 'semana' ? 100 : timeframe === 'mes' ? 400 : 1200;
-  const contactComplianceRate = Math.min(100, Math.round((contactsDone / expectedContacts) * 100));
+  // Meta esperada según modo (equipo completo vs individual)
+  const dailyTargetContacts = isExecutiveMode
+    ? (selectedAdvisor
+        ? (selectedAdvisor.targetDailyContacts || 20)
+        : Math.max(20, advisors.reduce((sum, a) => sum + (a.targetDailyContacts || 20), 0)))
+    : (currentUser.targetDailyContacts || 20);
+
+  const daysMultiplier = timeframe === 'hoy' ? 1 : timeframe === 'semana' ? 5 : timeframe === 'mes' ? 20 : 60;
+  const expectedContacts = dailyTargetContacts * daysMultiplier;
+  const contactComplianceRate = expectedContacts > 0 ? Math.min(100, Math.round((contactsDone / expectedContacts) * 100)) : 0;
 
   // Funnel steps
   const totalLeads = contactsDone;
@@ -47,15 +103,15 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
   // 90-Day Semáforo badge
   let semaforoBadge = {
     bg: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
-    title: 'Asesor Élite (Verde)',
+    title: isExecutiveMode && selectedAdvisorId === 'todos' ? 'Equipo en Ritmo Óptimo (Verde)' : 'Asesor Élite (Verde)',
     desc: 'Cumplimiento >= 85% y alta disciplina en oferta de anclaje High-Ticket.'
   };
 
   if (stats90.semaforo90Days === 'amarillo') {
     semaforoBadge = {
       bg: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
-      title: 'En Ajuste (Amarillo)',
-      desc: 'Cumplimiento entre 65% y 84%. Requiere consolidar citas semanales.'
+      title: isExecutiveMode && selectedAdvisorId === 'todos' ? 'Equipo en Consolidación (Amarillo)' : 'En Ajuste (Amarillo)',
+      desc: 'Requiere incrementar ritmo de prospección diaria y citas presenciales.'
     };
   } else if (stats90.semaforo90Days === 'rojo') {
     semaforoBadge = {
@@ -69,18 +125,37 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
     <div className="space-y-4 pb-24 text-slate-100">
       
       {/* Title */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-base font-bold text-white font-serif uppercase tracking-wide">
-            Mis Métricas de Rendimiento
+            {isExecutiveMode ? 'Métricas Totales de la Empresa' : 'Mis Métricas de Rendimiento'}
           </h2>
           <p className="text-xs text-slate-400">
-            {currentUser.name} • {currentBranch.shortName}
+            {isExecutiveMode
+              ? (selectedAdvisor ? `${selectedAdvisor.name} • Vista Individual` : `Consolidado Global • ${advisors.length} Asesores Comerciales`)
+              : `${currentUser.name} • ${currentBranch.shortName}`}
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-xl">
-          <Award className="w-4 h-4" />
-          <span>Ticket: {formatCurrency(stats90.averageTicket)}</span>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {isExecutiveMode && (
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs">
+              <Users className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <select
+                value={selectedAdvisorId}
+                onChange={(e) => setSelectedAdvisorId(e.target.value)}
+                className="bg-transparent text-white text-xs font-semibold focus:outline-none"
+              >
+                <option value="todos" className="bg-slate-900">Todo el Equipo ({advisors.length})</option>
+                {advisors.map(adv => (
+                  <option key={adv.id} value={adv.id} className="bg-slate-900">{adv.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-xl">
+            <Award className="w-4 h-4" />
+            <span>Ticket: {formatCurrency(stats90.averageTicket)}</span>
+          </div>
         </div>
       </div>
 
@@ -90,7 +165,7 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] uppercase font-bold tracking-widest text-slate-300">
-                Estatus Programa 90 Días
+                {isExecutiveMode && selectedAdvisorId === 'todos' ? 'Rendimiento Global 90 Días' : 'Estatus Programa 90 Días'}
               </span>
             </div>
             <h3 className="text-sm font-extrabold font-serif text-white flex items-center gap-2">
@@ -187,7 +262,7 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales }) =
           </div>
         </div>
 
-        {/* Ticket Promedio Personal */}
+        {/* Ticket Promedio */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             Ticket Promedio

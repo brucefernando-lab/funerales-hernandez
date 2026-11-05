@@ -3,15 +3,18 @@ import {
   FuneralPackage, Branch, BranchId, DailyReport, CloudSyncConfig 
 } from '../types';
 import { 
-  syncContactToCloud, 
-  syncActivityToCloud, 
-  syncTaskToCloud, 
-  syncUserToCloud, 
-  pullCloudData 
+  enqueueSync,
+  flushQueue,
+  pullCloudData,
+  fetchUsersFromCloud,
+  seedUsersIfMissing,
+  startAutoSync,
+  getPendingKeys
 } from './supabaseClient';
 
 const STORAGE_KEYS = {
   USERS: 'fh_users_v2',
+  DELETED_USERS: 'fh_deleted_users_v1',
   CURRENT_USER: 'fh_current_user_v2',
   CONTACTS: 'fh_contacts_v2',
   ACTIVITIES: 'fh_activities_v2',
@@ -276,9 +279,6 @@ export function getTodayDateString(offsetDays = 0): string {
   return `${year}-${month}-${day}`;
 }
 
-const today = getTodayDateString();
-const yesterday = getTodayDateString(-1);
-
 export const INITIAL_CONTACTS: Contact[] = [];
 export const INITIAL_TASKS: TaskPending[] = [];
 export const INITIAL_ACTIVITIES: Activity[] = [];
@@ -292,11 +292,25 @@ export const INITIAL_CLOUD_CONFIG: CloudSyncConfig = {
   supabaseUrl: 'https://liomjpoclsdxcjnnxqhi.supabase.co',
   supabaseAnonKey: 'sb_publishable_VHM7zdpXTaP4UAlUsxwmjQ_m3GxYih9',
   lastSyncedAt: new Date().toISOString(),
-  autoSyncIntervalMs: 30000,
+  autoSyncIntervalMs: 20000,
   syncStatus: 'connected'
 };
 
+/** Mezcla `patch` sobre `base` ignorando propiedades `undefined` para nunca borrar campos locales. */
+function mergeDefined<T extends Record<string, any>>(base: T, patch: Partial<T>): T {
+  const out: any = { ...base };
+  for (const key of Object.keys(patch)) {
+    const val = (patch as any)[key];
+    if (val !== undefined) {
+      out[key] = val;
+    }
+  }
+  return out as T;
+}
+
 class StorageService {
+  private initialized = false;
+
   private getItem<T>(key: string, defaultValue: T): T {
     try {
       const data = localStorage.getItem(key);
@@ -318,33 +332,36 @@ class StorageService {
   }
 
   public initialize(): void {
+    if (this.initialized) return;
+    this.initialized = true;
+
     const dummyIds = ['usr_carlos', 'usr_laura', 'usr_roberto'];
+    const deletedIds = this.getItem<string[]>(STORAGE_KEYS.DELETED_USERS, []);
     const existingUsers = this.getItem<User[] | null>(STORAGE_KEYS.USERS, null);
 
     if (!existingUsers || existingUsers.length === 0) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     } else {
-      // Filter out fictitious dummy users
       const realUsers = existingUsers.filter(u => 
         !dummyIds.includes(u.id) &&
+        !deletedIds.includes(u.id) &&
         u.name !== 'Carlos Mendoza' &&
         u.name !== 'Laura Benítez' &&
         u.name !== 'Roberto Sánchez'
       );
-      // Ensure all 7 real advisors and leadership exist
       INITIAL_USERS.forEach(iu => {
+        if (deletedIds.includes(iu.id)) return;
         const existingIdx = realUsers.findIndex(ru => ru.id === iu.id || ru.username === iu.username);
         if (existingIdx === -1) {
           realUsers.push(iu);
         } else {
-          // Keep custom passwords if edited by admin, but sync clean name & username
           realUsers[existingIdx] = {
             ...iu,
             ...realUsers[existingIdx],
-            name: iu.name,
+            name: realUsers[existingIdx].name || iu.name,
             username: realUsers[existingIdx].username || iu.username,
             password: realUsers[existingIdx].password || iu.password,
-            email: iu.email
+            email: realUsers[existingIdx].email || iu.email
           };
         }
       });
@@ -352,9 +369,8 @@ class StorageService {
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2] || INITIAL_USERS[0]);
+      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
     }
-    // Always update branches with official locations
     this.setItem(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
     if (!localStorage.getItem(STORAGE_KEYS.PACKAGES)) {
       this.setItem(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
@@ -376,11 +392,14 @@ class StorageService {
     const rpts = this.getItem<DailyReport[]>(STORAGE_KEYS.DAILY_REPORTS, []).filter(r => !dummyIds.includes(r.userId));
     this.setItem(STORAGE_KEYS.DAILY_REPORTS, rpts);
 
-    this.setItem(STORAGE_KEYS.CLOUD_CONFIG, INITIAL_CLOUD_CONFIG);
+    if (!localStorage.getItem(STORAGE_KEYS.CLOUD_CONFIG)) {
+      this.setItem(STORAGE_KEYS.CLOUD_CONFIG, INITIAL_CLOUD_CONFIG);
+    }
     
-    // Background initial sync of users & pull cloud data
-    INITIAL_USERS.forEach(u => syncUserToCloud(u));
-    this.syncAllWithCloud();
+    // Inserta usuarios iniciales SOLO si faltan (sin pisar contraseñas ya cambiadas en la nube) y arranca ciclo automático
+    seedUsersIfMissing(INITIAL_USERS).then(() => {
+      startAutoSync(() => this.syncAllWithCloud(), 20000);
+    });
   }
 
   // Users & Auth
@@ -392,7 +411,8 @@ class StorageService {
     const users = this.getUsers();
     const stored = this.getItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
     if (stored && stored.id && stored.name) {
-      return stored;
+      const fresh = users.find(u => u.id === stored.id);
+      return fresh || stored;
     }
     return users[0] || INITIAL_USERS[0];
   }
@@ -407,6 +427,7 @@ class StorageService {
     if (this.getCurrentUser().id === user.id) {
       this.setCurrentUser(user);
     }
+    enqueueSync('user', user.id, user);
   }
 
   public createUser(userData: Omit<User, 'id'>): User {
@@ -417,6 +438,7 @@ class StorageService {
     };
     users.push(newUser);
     this.setItem(STORAGE_KEYS.USERS, users);
+    enqueueSync('user', newUser.id, newUser);
     return newUser;
   }
 
@@ -431,8 +453,6 @@ class StorageService {
       const emailMatch = u.email.toLowerCase() === cleanInput;
       const usernameMatch = Boolean(u.username && u.username.toLowerCase() === cleanInput);
       const nameMatch = u.name.toLowerCase() === cleanInput;
-      
-      // Match first name or prefix (e.g. "manuel" matches "manuel.rios" or "Manuel Ríos González")
       const firstNameMatch = u.name.toLowerCase().split(' ')[0] === cleanInput;
       const userPrefixMatch = Boolean(u.username && u.username.toLowerCase().split('.')[0] === cleanInput);
 
@@ -470,6 +490,67 @@ class StorageService {
     return null;
   }
 
+  /** Sincroniza usuarios con Supabase antes de autenticar para reflejar cambios de contraseña o altas desde otros equipos. */
+  public async authenticateUserAsync(loginOrEmail: string, passwordAttempt: string): Promise<User | null> {
+    await this.syncUsersFromCloud();
+    const user = this.authenticateUser(loginOrEmail, passwordAttempt);
+    if (user) {
+      this.syncAllWithCloud();
+    }
+    return user;
+  }
+
+  public async syncUsersFromCloud(): Promise<void> {
+    try {
+      await flushQueue();
+      const cloudUsers = await fetchUsersFromCloud();
+      if (!cloudUsers || cloudUsers.length === 0) return;
+      this.mergeCloudUsers(cloudUsers);
+    } catch (e) {
+      console.warn('No se pudieron refrescar usuarios desde la nube', e);
+    }
+  }
+
+  private mergeCloudUsers(cloudUsers: (Partial<User> & { id: string })[]): void {
+    const pending = getPendingKeys();
+    const deletedIds = new Set(this.getItem<string[]>(STORAGE_KEYS.DELETED_USERS, []));
+    const localUsers = this.getUsers();
+    const map = new Map<string, User>();
+    localUsers.forEach(u => {
+      if (!deletedIds.has(u.id)) map.set(u.id, u);
+    });
+
+    const initialById = new Map<string, User>(INITIAL_USERS.map(u => [u.id, u]));
+
+    for (const cu of cloudUsers) {
+      if (deletedIds.has(cu.id)) continue;
+      if (pending.has(`user:${cu.id}`) && map.has(cu.id)) continue;
+
+      const base: User = map.get(cu.id) || initialById.get(cu.id) || {
+        id: cu.id,
+        name: cu.name || 'Asesor',
+        username: cu.username || cu.email?.split('@')[0] || cu.id,
+        email: cu.email || `${cu.id}@funeraleshernandez.com`,
+        password: cu.password || (cu.role === 'asesor' ? '123' : 'admin123'),
+        role: cu.role || 'asesor',
+        branch: cu.branch || 'sucursal_1',
+        active: cu.active ?? true,
+        targetDailyContacts: cu.targetDailyContacts ?? 20,
+        targetDailyAppointments: cu.targetDailyAppointments ?? 3,
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
+      };
+      map.set(cu.id, mergeDefined(base, cu));
+    }
+
+    const merged = Array.from(map.values());
+    this.setItem(STORAGE_KEYS.USERS, merged);
+    const curr = this.getItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    if (curr) {
+      const updatedCurr = merged.find(u => u.id === curr.id);
+      if (updatedCurr) this.setItem(STORAGE_KEYS.CURRENT_USER, updatedCurr);
+    }
+  }
+
   public authenticateAdmin(usernameOrEmail: string, passwordAttempt: string): User | null {
     const users = this.getUsers();
     const cleanInput = usernameOrEmail.trim().toLowerCase();
@@ -496,31 +577,49 @@ class StorageService {
     const users = this.getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) return false;
-    users[userIndex] = {
+    const updatedUser: User = {
       ...users[userIndex],
       password: newPassword.trim()
     };
+    users[userIndex] = updatedUser;
     this.setItem(STORAGE_KEYS.USERS, users);
     const curr = this.getCurrentUser();
     if (curr && curr.id === userId) {
-      this.setCurrentUser(users[userIndex]);
+      this.setCurrentUser(updatedUser);
     }
+    enqueueSync('user', updatedUser.id, updatedUser);
     return true;
   }
 
   public toggleUserStatus(userId: string): void {
+    let toggled: User | undefined;
     const users = this.getUsers().map(u => {
       if (u.id === userId) {
-        return { ...u, active: !u.active };
+        toggled = { ...u, active: !u.active };
+        return toggled;
       }
       return u;
     });
     this.setItem(STORAGE_KEYS.USERS, users);
+    if (toggled) {
+      enqueueSync('user', toggled.id, toggled);
+    }
   }
 
   public deleteUser(userId: string): void {
+    const existing = this.getUsers().find(u => u.id === userId);
     const users = this.getUsers().filter(u => u.id !== userId);
     this.setItem(STORAGE_KEYS.USERS, users);
+
+    const deletedIds = this.getItem<string[]>(STORAGE_KEYS.DELETED_USERS, []);
+    if (!deletedIds.includes(userId)) {
+      deletedIds.push(userId);
+      this.setItem(STORAGE_KEYS.DELETED_USERS, deletedIds);
+    }
+    if (existing) {
+      // Se desactiva en la nube para no romper llaves foráneas de sus prospectos históricos
+      enqueueSync('user', existing.id, { ...existing, active: false });
+    }
   }
 
   // Branches
@@ -558,8 +657,7 @@ class StorageService {
       list.unshift(contact);
     }
     this.setItem(STORAGE_KEYS.CONTACTS, list);
-    // Background cloud sync to Supabase
-    syncContactToCloud(contact);
+    enqueueSync('contact', contact.id, contact);
   }
 
   // Soft delete: hides from advisor, preserves forever for owners/admin
@@ -574,7 +672,7 @@ class StorageService {
       };
       list[idx] = updated;
       this.setItem(STORAGE_KEYS.CONTACTS, list);
-      syncContactToCloud(updated);
+      enqueueSync('contact', updated.id, updated);
     }
   }
 
@@ -587,8 +685,7 @@ class StorageService {
     const list = this.getActivities();
     list.unshift(activity);
     this.setItem(STORAGE_KEYS.ACTIVITIES, list);
-    // Background cloud sync to Supabase
-    syncActivityToCloud(activity);
+    enqueueSync('activity', activity.id, activity);
   }
 
   // Tasks
@@ -605,38 +702,7 @@ class StorageService {
       list.unshift(task);
     }
     this.setItem(STORAGE_KEYS.TASKS, list);
-    // Background cloud sync to Supabase
-    syncTaskToCloud(task);
-  }
-
-  // Bidirectional Cloud Synchronization
-  public async syncAllWithCloud(): Promise<void> {
-    const cloud = await pullCloudData();
-    if (!cloud) return;
-
-    if (cloud.contacts.length > 0) {
-      const local = this.getContacts();
-      const mergedMap = new Map<string, Contact>();
-      local.forEach(c => mergedMap.set(c.id, c));
-      cloud.contacts.forEach(c => mergedMap.set(c.id, c));
-      this.setItem(STORAGE_KEYS.CONTACTS, Array.from(mergedMap.values()));
-    }
-
-    if (cloud.activities.length > 0) {
-      const local = this.getActivities();
-      const mergedMap = new Map<string, Activity>();
-      local.forEach(a => mergedMap.set(a.id, a));
-      cloud.activities.forEach(a => mergedMap.set(a.id, a));
-      this.setItem(STORAGE_KEYS.ACTIVITIES, Array.from(mergedMap.values()));
-    }
-
-    if (cloud.tasks.length > 0) {
-      const local = this.getTasks();
-      const mergedMap = new Map<string, TaskPending>();
-      local.forEach(t => mergedMap.set(t.id, t));
-      cloud.tasks.forEach(t => mergedMap.set(t.id, t));
-      this.setItem(STORAGE_KEYS.TASKS, Array.from(mergedMap.values()));
-    }
+    enqueueSync('task', task.id, task);
   }
 
   public completeTask(taskId: string): void {
@@ -646,6 +712,7 @@ class StorageService {
       task.isCompleted = true;
       task.completedAt = new Date().toISOString();
       this.setItem(STORAGE_KEYS.TASKS, list);
+      enqueueSync('task', task.id, task);
     }
   }
 
@@ -658,6 +725,7 @@ class StorageService {
     const list = this.getSales();
     list.unshift(sale);
     this.setItem(STORAGE_KEYS.SALES, list);
+    enqueueSync('sale', sale.id, sale);
   }
 
   // Daily Reports (Cortes Diarios Oficiales en Plataforma)
@@ -667,7 +735,6 @@ class StorageService {
 
   public saveDailyReport(report: DailyReport): void {
     const list = this.getDailyReports();
-    // Replace if already submitted today by this user, else unshift
     const idx = list.findIndex(r => r.userId === report.userId && r.date === report.date);
     if (idx >= 0) {
       list[idx] = report;
@@ -675,11 +742,228 @@ class StorageService {
       list.unshift(report);
     }
     this.setItem(STORAGE_KEYS.DAILY_REPORTS, list);
+    enqueueSync('report', report.id, report);
   }
 
   public getTodayReportForUser(userId: string): DailyReport | undefined {
     const todayStr = getTodayDateString();
     return this.getDailyReports().find(r => r.userId === userId && r.date === todayStr);
+  }
+
+  // Bidirectional Cloud Synchronization
+  public async syncAllWithCloud(): Promise<void> {
+    // 1. Sube primero cualquier cambio local pendiente en el orden correcto de llaves foráneas
+    await flushQueue();
+
+    // 2. Descarga estado actual de la nube
+    const cloud = await pullCloudData();
+    if (!cloud) return;
+
+    const pending = getPendingKeys();
+
+    // 3. Usuarios
+    if (cloud.users.length > 0) {
+      this.mergeCloudUsers(cloud.users);
+    }
+    const cloudUserIds = new Set(cloud.users.map(u => u.id));
+    for (const localUser of this.getUsers()) {
+      if (!cloudUserIds.has(localUser.id) && !pending.has(`user:${localUser.id}`)) {
+        enqueueSync('user', localUser.id, localUser);
+      }
+    }
+
+    // 4. Prospectos (preserva notas y campos locales cuando la nube no tenga columnas opcionales)
+    const localContacts = this.getContacts();
+    const contactMap = new Map<string, Contact>();
+    localContacts.forEach(c => contactMap.set(c.id, c));
+    const cloudContactIds = new Set<string>();
+
+    for (const cc of cloud.contacts) {
+      cloudContactIds.add(cc.id);
+      if (pending.has(`contact:${cc.id}`) && contactMap.has(cc.id)) continue;
+      const base: Contact = contactMap.get(cc.id) || {
+        id: cc.id,
+        userId: cc.userId || 'usr_bruce',
+        branch: cc.branch || 'sucursal_1',
+        name: cc.name || 'Prospecto',
+        phone: cc.phone || 'Sin registrar',
+        source: cc.source || 'frio',
+        status: cc.status || 'prospecto',
+        createdAt: cc.createdAt || getTodayDateString(),
+        deletedByAdvisor: Boolean(cc.deletedByAdvisor)
+      };
+      contactMap.set(cc.id, mergeDefined(base, cc));
+    }
+    for (const lc of localContacts) {
+      if (!cloudContactIds.has(lc.id) && !pending.has(`contact:${lc.id}`)) {
+        enqueueSync('contact', lc.id, lc);
+      }
+    }
+    if (cloud.contacts.length > 0 || localContacts.length > 0) {
+      this.setItem(STORAGE_KEYS.CONTACTS, Array.from(contactMap.values()));
+    }
+
+    // Resuelve nombres/teléfonos desde contactos si la tabla activities en la nube aún no guarda esas columnas
+    const allContactsById = contactMap;
+
+    // 5. Actividades
+    const localActivities = this.getActivities();
+    const activityMap = new Map<string, Activity>();
+    localActivities.forEach(a => activityMap.set(a.id, a));
+    const cloudActivityIds = new Set<string>();
+    const packagesById = new Map(this.getPackages().map(p => [p.id, p.name]));
+
+    for (const ca of cloud.activities) {
+      cloudActivityIds.add(ca.id);
+      if (pending.has(`activity:${ca.id}`) && activityMap.has(ca.id)) continue;
+      const linkedContact = ca.contactId ? allContactsById.get(ca.contactId) : undefined;
+      const base: Activity = activityMap.get(ca.id) || {
+        id: ca.id,
+        userId: ca.userId || 'usr_bruce',
+        contactId: ca.contactId || '',
+        contactName: ca.contactName || linkedContact?.name || 'Prospecto',
+        contactPhone: ca.contactPhone || linkedContact?.phone || '',
+        activityType: ca.activityType || 'contacto_diario',
+        source: ca.source || linkedContact?.source || 'frio',
+        packageOfferedId: ca.packageOfferedId || 'pkg_celestial',
+        packageOfferedName: ca.packageOfferedName || (ca.packageOfferedId ? packagesById.get(ca.packageOfferedId) : undefined) || 'Plan Previsión',
+        result: ca.result || 'en_seguimiento',
+        createdAt: ca.createdAt || new Date().toISOString()
+      };
+      const mergedAct = mergeDefined(base, ca);
+      if ((!mergedAct.contactName || mergedAct.contactName === 'Contacto' || mergedAct.contactName === 'Prospecto') && linkedContact?.name) {
+        mergedAct.contactName = linkedContact.name;
+      }
+      if (!mergedAct.contactPhone && linkedContact?.phone) {
+        mergedAct.contactPhone = linkedContact.phone;
+      }
+      activityMap.set(ca.id, mergedAct);
+    }
+    for (const la of localActivities) {
+      if (!cloudActivityIds.has(la.id) && !pending.has(`activity:${la.id}`)) {
+        enqueueSync('activity', la.id, la);
+      }
+    }
+    if (cloud.activities.length > 0 || localActivities.length > 0) {
+      const sortedActs = Array.from(activityMap.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      this.setItem(STORAGE_KEYS.ACTIVITIES, sortedActs);
+    }
+
+    // 6. Tareas Pendientes
+    const localTasks = this.getTasks();
+    const taskMap = new Map<string, TaskPending>();
+    localTasks.forEach(t => taskMap.set(t.id, t));
+    const cloudTaskIds = new Set<string>();
+
+    for (const ct of cloud.tasks) {
+      cloudTaskIds.add(ct.id);
+      if (pending.has(`task:${ct.id}`) && taskMap.has(ct.id)) continue;
+      const linkedContact = ct.contactId ? allContactsById.get(ct.contactId) : undefined;
+      const inferredTaskType = ct.notes && /^Cita presencial/i.test(ct.notes) ? 'cita' : 'llamada';
+      const base: TaskPending = taskMap.get(ct.id) || {
+        id: ct.id,
+        userId: ct.userId || 'usr_bruce',
+        contactId: ct.contactId || '',
+        contactName: ct.contactName || linkedContact?.name || 'Prospecto',
+        contactPhone: ct.contactPhone || linkedContact?.phone || '',
+        dueDate: ct.dueDate || getTodayDateString(),
+        dueTime: ct.dueTime || '10:30',
+        taskType: ct.taskType || inferredTaskType,
+        isCompleted: Boolean(ct.isCompleted),
+        createdAt: ct.createdAt || new Date().toISOString()
+      };
+      taskMap.set(ct.id, mergeDefined(base, ct));
+    }
+    for (const lt of localTasks) {
+      if (!cloudTaskIds.has(lt.id) && !pending.has(`task:${lt.id}`)) {
+        enqueueSync('task', lt.id, lt);
+      }
+    }
+    if (cloud.tasks.length > 0 || localTasks.length > 0) {
+      this.setItem(STORAGE_KEYS.TASKS, Array.from(taskMap.values()));
+    }
+
+    // 7. Ventas
+    const localSales = this.getSales();
+    const saleMap = new Map<string, Sale>();
+    localSales.forEach(s => saleMap.set(s.id, s));
+    const cloudSaleIds = new Set<string>();
+
+    for (const cs of cloud.sales) {
+      cloudSaleIds.add(cs.id);
+      if (pending.has(`sale:${cs.id}`) && saleMap.has(cs.id)) continue;
+      const linkedContact = cs.contactId ? allContactsById.get(cs.contactId) : undefined;
+      const base: Sale = saleMap.get(cs.id) || {
+        id: cs.id,
+        userId: cs.userId || 'usr_bruce',
+        contactId: cs.contactId || '',
+        contactName: cs.contactName || linkedContact?.name || 'Cliente',
+        packageId: cs.packageId || 'pkg_celestial',
+        packageName: cs.packageName || 'Plan Previsión',
+        amount: cs.amount ?? 0,
+        saleDate: cs.saleDate || new Date().toISOString(),
+        referralsCount: cs.referralsCount ?? 0,
+        referrals: cs.referrals || []
+      };
+      saleMap.set(cs.id, mergeDefined(base, cs));
+    }
+    for (const ls of localSales) {
+      if (!cloudSaleIds.has(ls.id) && !pending.has(`sale:${ls.id}`)) {
+        enqueueSync('sale', ls.id, ls);
+      }
+    }
+    if (cloud.sales.length > 0 || localSales.length > 0) {
+      const sortedSales = Array.from(saleMap.values()).sort((a, b) => (b.saleDate || '').localeCompare(a.saleDate || ''));
+      this.setItem(STORAGE_KEYS.SALES, sortedSales);
+    }
+
+    // 8. Cortes Diarios
+    const localReports = this.getDailyReports();
+    const reportMap = new Map<string, DailyReport>();
+    localReports.forEach(r => reportMap.set(r.id, r));
+    const cloudReportIds = new Set<string>();
+    const usersById = new Map(this.getUsers().map(u => [u.id, u]));
+
+    for (const cr of cloud.reports) {
+      cloudReportIds.add(cr.id);
+      if (pending.has(`report:${cr.id}`) && reportMap.has(cr.id)) continue;
+      const u = cr.userId ? usersById.get(cr.userId) : undefined;
+      const base: DailyReport = reportMap.get(cr.id) || {
+        id: cr.id,
+        userId: cr.userId || 'usr_bruce',
+        userName: cr.userName || u?.name || 'Asesor',
+        branch: cr.branch || u?.branch || 'sucursal_1',
+        date: cr.date || getTodayDateString(),
+        submittedAt: cr.submittedAt || new Date().toISOString(),
+        contactsCount: cr.contactsCount ?? 0,
+        contactsTarget: cr.contactsTarget ?? 20,
+        appointmentsCount: cr.appointmentsCount ?? 0,
+        appointmentsTarget: cr.appointmentsTarget ?? 3,
+        salesVolume: cr.salesVolume ?? 0,
+        salesCount: cr.salesCount ?? 0,
+        referralsCount: cr.referralsCount ?? 0,
+        semaforo: cr.semaforo || 'amarillo',
+        overallScore: cr.overallScore ?? 0
+      };
+      reportMap.set(cr.id, mergeDefined(base, cr));
+    }
+    for (const lr of localReports) {
+      if (!cloudReportIds.has(lr.id) && !pending.has(`report:${lr.id}`)) {
+        enqueueSync('report', lr.id, lr);
+      }
+    }
+    if (cloud.reports.length > 0 || localReports.length > 0) {
+      const sortedReports = Array.from(reportMap.values()).sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      this.setItem(STORAGE_KEYS.DAILY_REPORTS, sortedReports);
+    }
+
+    // Actualiza sello de última sincronización
+    const cfg = this.getCloudConfig();
+    this.setItem(STORAGE_KEYS.CLOUD_CONFIG, {
+      ...cfg,
+      lastSyncedAt: new Date().toISOString(),
+      syncStatus: 'connected'
+    });
   }
 
   // Cloud Configuration (Multi-Dispositivo)

@@ -6,6 +6,7 @@ import {
   exportToCSV, Timeframe, filterByTimeframe 
 } from '../services/metrics';
 import { storage, getTodayDateString } from '../services/storage';
+import { diagnoseCloud, getSyncStatus } from '../services/supabaseClient';
 import { 
   Download, ShieldCheck, Building2, Users, DollarSign, 
   TrendingUp, Settings, Edit3, Plus, Check, AlertTriangle, 
@@ -30,7 +31,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onOpenNewContact
 }) => {
   const { allUsers, branches, currentUser } = useAuth();
-  const isSuperAdmin = currentUser.role === 'super_admin';
+  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
   const todayStr = getTodayDateString();
   
   // Filters
@@ -249,22 +250,54 @@ export const AdminView: React.FC<AdminViewProps> = ({
     onShowToast('Configuración de nube guardada exitosamente.');
   };
 
-  const handleTestCloudSync = () => {
-    onShowToast('Sincronización Cloud exitosa: Base de datos vinculada.');
+  const [isTestingCloud, setIsTestingCloud] = useState(false);
+
+  const handleTestCloudSync = async () => {
+    setIsTestingCloud(true);
+    try {
+      await storage.syncAllWithCloud();
+      const diag = await diagnoseCloud();
+      onRefreshData();
+      if (!diag.reachable) {
+        onShowToast('Sin conexión con Supabase. Verifica tu red.');
+      } else if (diag.missingTables.length > 0) {
+        onShowToast(`Conectado a Supabase. Faltan crear tablas: ${diag.missingTables.join(', ')} (Copia el SQL abajo).`);
+      } else if (diag.tablesWithMissingColumns.length > 0) {
+        onShowToast(`Conectado y sincronizado. Ejecuta el SQL de actualización para habilitar columnas en: ${diag.tablesWithMissingColumns.join(', ')}.`);
+      } else {
+        const status = getSyncStatus();
+        onShowToast(`Sincronización 100% activa (${status.pending} pendientes en cola).`);
+      }
+    } finally {
+      setIsTestingCloud(false);
+    }
   };
 
   const copySupabaseSQL = () => {
-    const sql = `-- Esquema Cloud para Funerales Hernández en Supabase PostgreSQL
+    const sql = `-- Esquema Completo e Idempotente para Funerales Hernández en Supabase PostgreSQL
+-- Seguro de ejecutar en cualquier momento (no borra datos existentes)
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  username TEXT,
+  password TEXT,
   email TEXT UNIQUE NOT NULL,
+  phone TEXT,
   role TEXT DEFAULT 'asesor',
   branch TEXT NOT NULL,
   active BOOLEAN DEFAULT TRUE,
   target_contacts INT DEFAULT 20,
-  target_appointments INT DEFAULT 3
+  target_appointments INT DEFAULT 3,
+  hire_date TEXT
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS target_contacts INT DEFAULT 20;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS target_appointments INT DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hire_date TEXT;
 
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
@@ -274,36 +307,95 @@ CREATE TABLE IF NOT EXISTS contacts (
   phone TEXT,
   source TEXT,
   status TEXT DEFAULT 'prospecto',
+  notes TEXT,
+  last_interaction TEXT,
+  deleted_by_advisor BOOLEAN DEFAULT FALSE,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_interaction TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deleted_by_advisor BOOLEAN DEFAULT FALSE;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id),
   contact_id TEXT REFERENCES contacts(id),
+  contact_name TEXT,
+  contact_phone TEXT,
+  source TEXT,
   activity_type TEXT NOT NULL,
   package_offered_id TEXT,
+  package_offered_name TEXT,
   result TEXT NOT NULL,
   objection TEXT,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS daily_reports (
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS contact_name TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS package_offered_name TEXT;
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  contact_id TEXT REFERENCES contacts(id),
+  contact_name TEXT,
+  contact_phone TEXT,
+  task_type TEXT DEFAULT 'llamada',
+  due_date TEXT,
+  due_time TEXT,
+  location TEXT,
+  notes TEXT,
+  is_completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'llamada';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS sales (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id),
   branch TEXT NOT NULL,
-  date DATE NOT NULL,
-  contacts_count INT,
-  appointments_count INT,
-  sales_volume NUMERIC,
+  contact_id TEXT REFERENCES contacts(id),
+  contact_name TEXT,
+  package_id TEXT,
+  package_name TEXT,
+  amount NUMERIC DEFAULT 0,
+  referrals_count INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS daily_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  user_name TEXT,
+  branch TEXT NOT NULL,
+  date TEXT NOT NULL,
+  contacts_count INT DEFAULT 0,
+  target_contacts INT DEFAULT 20,
+  appointments_count INT DEFAULT 0,
+  target_appointments INT DEFAULT 3,
+  sales_count INT DEFAULT 0,
+  sales_volume NUMERIC DEFAULT 0,
+  referrals_count INT DEFAULT 0,
+  overall_score INT DEFAULT 0,
   semaforo TEXT,
+  daily_notes TEXT,
+  signature TEXT,
   submitted_at TIMESTAMPTZ DEFAULT NOW()
 );`;
     navigator.clipboard.writeText(sql);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 3000);
-    onShowToast('Código SQL copiado al portapapeles.');
+    onShowToast('Código SQL completo copiado al portapapeles.');
   };
 
   // CSV Export Handler
@@ -1559,8 +1651,8 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                 onClick={handleTestCloudSync}
                 className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-xl text-xs flex items-center gap-1"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                <span>Sincronizar</span>
+                <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isTestingCloud ? 'animate-spin' : ''}`} />
+                <span>{isTestingCloud ? 'Verificando...' : 'Sincronizar Ahora'}</span>
               </button>
             </div>
           </div>

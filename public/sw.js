@@ -1,8 +1,9 @@
-const CACHE_NAME = 'funeraria-hernandez-v1';
+const CACHE_NAME = 'funerales-hernandez-v2';
 const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/logo.png',
   '/logo.svg'
 ];
 
@@ -29,7 +30,10 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Network first with cache fallback
+  // Only cache GET requests for same-origin static assets (never cache Supabase API calls)
+  if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) {
+    return;
+  }
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
   );

@@ -9,7 +9,6 @@ import { MetricsView } from './views/MetricsView';
 import { ContactsView } from './views/ContactsView';
 import { AdminView } from './views/AdminView';
 import { AdvisorLoginView } from './views/AdvisorLoginView';
-import { AdminLoginView } from './views/AdminLoginView';
 import { ModalQuickCapture, InitialPackageData } from './components/ModalQuickCapture';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { storage, getTodayDateString } from './services/storage';
@@ -17,10 +16,7 @@ import { TaskPending, Activity, Sale, Contact, User } from './types';
 
 export const App: React.FC = () => {
   const { currentUser, allUsers, switchDemoUser } = useAuth();
-  
-  // URL Routing state
-  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname.toLowerCase());
-  const isAdminRoute = currentPath.startsWith('/admin');
+
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('fh_admin_auth') === 'true';
   });
@@ -34,6 +30,7 @@ export const App: React.FC = () => {
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [captureInitialContact, setCaptureInitialContact] = useState<{ id?: string; name: string; phone: string } | undefined>(undefined);
   const [captureInitialPackage, setCaptureInitialPackage] = useState<InitialPackageData | undefined>(undefined);
+  const [completingTaskId, setCompletingTaskId] = useState<string | undefined>(undefined);
 
   // Live state from storage
   const [tasks, setTasks] = useState<TaskPending[]>([]);
@@ -41,19 +38,6 @@ export const App: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const navigateTo = (path: string) => {
-    window.history.pushState({}, '', path);
-    setCurrentPath(path.toLowerCase());
-  };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname.toLowerCase());
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   const loadData = () => {
     setTasks(storage.getTasks());
@@ -76,7 +60,7 @@ export const App: React.FC = () => {
 
   // Sync current user with session storage for advisor or admin
   useEffect(() => {
-    if (isAdminRoute && isAdminAuthenticated) {
+    if (isAdminAuthenticated) {
       const adminSessionId = sessionStorage.getItem('fh_admin_session');
       if (adminSessionId) {
         const admin = allUsers.find(u => u.id === adminSessionId);
@@ -94,7 +78,7 @@ export const App: React.FC = () => {
         switchDemoUser(advisorSessionId);
       }
     }
-  }, [allUsers, currentUser.id, isAdminRoute, isAdminAuthenticated]);
+  }, [allUsers, currentUser.id, isAdminAuthenticated, switchDemoUser]);
 
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
     const newToast: ToastMessage = {
@@ -116,21 +100,25 @@ export const App: React.FC = () => {
 
   const handleOpenQuickCapture = (
     contact?: { id?: string; name: string; phone: string },
-    pkg?: InitialPackageData
+    pkg?: InitialPackageData,
+    taskId?: string
   ) => {
     setCaptureInitialContact(contact);
     setCaptureInitialPackage(pkg);
+    setCompletingTaskId(taskId);
     setIsQuickCaptureOpen(true);
   };
 
   const handleCompleteTask = (task: TaskPending) => {
-    handleOpenQuickCapture({
-      id: task.contactId,
-      name: task.contactName,
-      phone: task.contactPhone
-    });
-    storage.completeTask(task.id);
-    loadData();
+    handleOpenQuickCapture(
+      {
+        id: task.contactId,
+        name: task.contactName,
+        phone: task.contactPhone
+      },
+      undefined,
+      task.id
+    );
   };
 
   const handleRescheduleTask = (task: TaskPending, newDate: string, newTime: string) => {
@@ -152,7 +140,7 @@ export const App: React.FC = () => {
     sessionStorage.removeItem('fh_advisor_session');
     const firstAdvisor = allUsers.find(u => u.role === 'asesor');
     if (firstAdvisor) switchDemoUser(firstAdvisor.id);
-    navigateTo('/');
+    window.history.pushState({}, '', '/');
   };
 
   const handleUnifiedLogin = (user: User) => {
@@ -226,6 +214,7 @@ export const App: React.FC = () => {
             <MetricsView
               activities={activities}
               sales={sales}
+              isExecutive={true}
             />
           ) : (
             <AdminView
@@ -254,10 +243,15 @@ export const App: React.FC = () => {
             setIsQuickCaptureOpen(false);
             setCaptureInitialPackage(undefined);
             setCaptureInitialContact(undefined);
+            setCompletingTaskId(undefined);
           }}
           initialContact={captureInitialContact}
           initialPackage={captureInitialPackage}
           onSuccess={(msg) => {
+            if (completingTaskId) {
+              storage.completeTask(completingTaskId);
+              setCompletingTaskId(undefined);
+            }
             loadData();
             showToast('Prospecto Registrado', msg, 'success');
           }}
@@ -366,10 +360,15 @@ export const App: React.FC = () => {
           setIsQuickCaptureOpen(false);
           setCaptureInitialPackage(undefined);
           setCaptureInitialContact(undefined);
+          setCompletingTaskId(undefined);
         }}
         initialContact={captureInitialContact}
         initialPackage={captureInitialPackage}
         onSuccess={(msg) => {
+          if (completingTaskId) {
+            storage.completeTask(completingTaskId);
+            setCompletingTaskId(undefined);
+          }
           loadData();
           showToast('Registro Exitoso', msg, 'success');
         }}
