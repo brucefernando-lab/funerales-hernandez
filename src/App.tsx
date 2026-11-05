@@ -73,8 +73,19 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('fh_storage_change', handleStorageChange);
   }, []);
 
-  // Sync current user with session storage for advisor
+  // Sync current user with session storage for advisor or admin
   useEffect(() => {
+    if (isAdminRoute && isAdminAuthenticated) {
+      const adminSessionId = sessionStorage.getItem('fh_admin_session');
+      if (adminSessionId) {
+        const admin = allUsers.find(u => u.id === adminSessionId);
+        if (admin && currentUser.id !== adminSessionId) {
+          switchDemoUser(adminSessionId);
+        }
+      }
+      return;
+    }
+
     const advisorSessionId = sessionStorage.getItem('fh_advisor_session');
     if (advisorSessionId) {
       const adv = allUsers.find(u => u.id === advisorSessionId);
@@ -82,7 +93,7 @@ export const App: React.FC = () => {
         switchDemoUser(advisorSessionId);
       }
     }
-  }, [allUsers, currentUser.id]);
+  }, [allUsers, currentUser.id, isAdminRoute, isAdminAuthenticated]);
 
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
     const newToast: ToastMessage = {
@@ -141,6 +152,7 @@ export const App: React.FC = () => {
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
     sessionStorage.removeItem('fh_admin_auth');
+    sessionStorage.removeItem('fh_admin_session');
     // Switch to first advisor for safety
     const firstAdvisor = allUsers.find(u => u.role === 'asesor');
     if (firstAdvisor) switchDemoUser(firstAdvisor.id);
@@ -157,11 +169,11 @@ export const App: React.FC = () => {
     if (!isAdminAuthenticated) {
       return (
         <AdminLoginView
-          onSuccess={() => {
+          onSuccess={(adminUser) => {
             setIsAdminAuthenticated(true);
             sessionStorage.setItem('fh_admin_auth', 'true');
-            const owner = allUsers.find(u => u.role === 'super_admin');
-            if (owner) switchDemoUser(owner.id);
+            sessionStorage.setItem('fh_admin_session', adminUser.id);
+            switchDemoUser(adminUser.id);
           }}
           onGoToAdvisorLogin={() => navigateTo('/login')}
         />

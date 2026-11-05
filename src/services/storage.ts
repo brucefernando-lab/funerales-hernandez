@@ -95,33 +95,60 @@ export const INITIAL_PACKAGES: FuneralPackage[] = [
   }
 ];
 
-// Initial Users: Owners (Super Admin) and Leadership
+// Initial Users: Leadership (Daniel, Linda, Rosa, Bruce) and Advisors
 export const INITIAL_USERS: User[] = [
+  // Liderazgo y Dirección General
   {
-    id: 'usr_dueno',
-    name: 'Don Fernando Hernández',
-    username: 'fernando',
-    password: '7788',
-    email: 'fernando.dueno@funeraleshernandez.com',
+    id: 'usr_bruce',
+    name: 'Bruce',
+    username: 'bruce',
+    password: 'admin123',
+    email: 'bruce@funeraleshernandez.com',
     role: 'super_admin',
+    branch: 'sucursal_1',
+    active: true,
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+    phone: '4425550000',
+    hireDate: '2026-01-01'
+  },
+  {
+    id: 'usr_daniel',
+    name: 'Daniel',
+    username: 'daniel',
+    password: 'admin123',
+    email: 'daniel@funeraleshernandez.com',
+    role: 'admin',
     branch: 'sucursal_1',
     active: true,
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     phone: '4425550001',
-    hireDate: '2010-01-01'
+    hireDate: '2026-01-01'
   },
   {
-    id: 'usr_admin',
-    name: 'Lic. Patricia Hernández',
-    username: 'patricia',
-    password: '7788',
-    email: 'patricia.hernandez@funeraleshernandez.com',
+    id: 'usr_linda',
+    name: 'Linda',
+    username: 'linda',
+    password: 'admin123',
+    email: 'linda@funeraleshernandez.com',
     role: 'admin',
     branch: 'sucursal_1',
     active: true,
     avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-    phone: '4425550199',
-    hireDate: '2024-01-10'
+    phone: '4425550002',
+    hireDate: '2026-01-01'
+  },
+  {
+    id: 'usr_rosa',
+    name: 'Rosa',
+    username: 'rosa',
+    password: 'admin123',
+    email: 'rosa@funeraleshernandez.com',
+    role: 'admin',
+    branch: 'sucursal_1',
+    active: true,
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    phone: '4425550003',
+    hireDate: '2026-01-01'
   },
   // Equipo Oficial de Asesores Comerciales (Nomina Funerales Hernández)
   {
@@ -405,6 +432,44 @@ class StorageService {
       return user;
     }
     return null;
+  }
+
+  public authenticateAdmin(usernameOrEmail: string, passwordAttempt: string): User | null {
+    const users = this.getUsers();
+    const cleanInput = usernameOrEmail.trim().toLowerCase();
+    const cleanPass = passwordAttempt.trim();
+
+    const admin = users.find(u => {
+      if ((u.role !== 'admin' && u.role !== 'super_admin') || !u.active) return false;
+      const emailMatch = u.email.toLowerCase() === cleanInput;
+      const usernameMatch = Boolean(u.username && u.username.toLowerCase() === cleanInput);
+      const nameMatch = u.name.toLowerCase() === cleanInput;
+      const firstNameMatch = u.name.toLowerCase().split(' ')[0] === cleanInput;
+      return emailMatch || usernameMatch || nameMatch || firstNameMatch;
+    });
+
+    if (!admin) return null;
+    const validPassword = admin.password || 'admin123';
+    if (validPassword === cleanPass) {
+      return admin;
+    }
+    return null;
+  }
+
+  public changePassword(userId: string, newPassword: string): boolean {
+    const users = this.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) return false;
+    users[userIndex] = {
+      ...users[userIndex],
+      password: newPassword.trim()
+    };
+    this.setItem(STORAGE_KEYS.USERS, users);
+    const curr = this.getCurrentUser();
+    if (curr && curr.id === userId) {
+      this.setCurrentUser(users[userIndex]);
+    }
+    return true;
   }
 
   public toggleUserStatus(userId: string): void {

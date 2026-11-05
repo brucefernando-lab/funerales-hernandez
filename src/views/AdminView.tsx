@@ -10,7 +10,8 @@ import {
   Download, ShieldCheck, Building2, Users, DollarSign, 
   TrendingUp, Settings, Edit3, Plus, Check, AlertTriangle, 
   RefreshCw, Sparkles, UserPlus, Eye, Clock, Phone, Radio, 
-  Crown, Trash2, ToggleLeft, ToggleRight, ClipboardCheck, Cloud, Database, Copy, CheckCircle2
+  Crown, Trash2, ToggleLeft, ToggleRight, ClipboardCheck, Cloud, Database, Copy, CheckCircle2,
+  KeyRound, EyeOff, Lock, UserCheck
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -53,6 +54,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
   // Edit password state
   const [editingPasswordUserId, setEditingPasswordUserId] = useState<string | null>(null);
   const [tempNewPassword, setTempNewPassword] = useState('');
+
+  // Personal change password state
+  const [isChangeMyPasswordOpen, setIsChangeMyPasswordOpen] = useState(false);
+  const [myNewPassword, setMyNewPassword] = useState('');
+  const [myConfirmPassword, setMyConfirmPassword] = useState('');
+  const [showMyPassword, setShowMyPassword] = useState(false);
+  const [changeMyPassError, setChangeMyPassError] = useState('');
 
   // Cloud Config state
   const [cloudConfig, setCloudConfig] = useState<CloudSyncConfig>(() => storage.getCloudConfig());
@@ -170,6 +178,33 @@ export const AdminView: React.FC<AdminViewProps> = ({
       setTempNewPassword('');
       onRefreshData();
       onShowToast(`Contraseña actualizada para ${user.name}`);
+    }
+  };
+
+  const handleChangeMyPasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangeMyPassError('');
+
+    const cleanPass = myNewPassword.trim();
+    if (cleanPass.length < 4) {
+      setChangeMyPassError('La contraseña debe tener al menos 4 caracteres.');
+      return;
+    }
+
+    if (cleanPass !== myConfirmPassword.trim()) {
+      setChangeMyPassError('Las contraseñas no coinciden. Verifícalas nuevamente.');
+      return;
+    }
+
+    const ok = storage.changePassword(currentUser.id, cleanPass);
+    if (ok) {
+      setIsChangeMyPasswordOpen(false);
+      setMyNewPassword('');
+      setMyConfirmPassword('');
+      onRefreshData();
+      onShowToast(`¡Contraseña actualizada exitosamente para ${currentUser.name}!`);
+    } else {
+      setChangeMyPassError('No se pudo actualizar la contraseña.');
     }
   };
 
@@ -315,32 +350,74 @@ CREATE TABLE IF NOT EXISTS daily_reports (
     <div className="space-y-4 pb-24 text-slate-100">
       
       {/* Admin / Owner Top Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            {isSuperAdmin ? (
-              <Crown className="w-5 h-5 text-amber-400" />
-            ) : (
-              <ShieldCheck className="w-5 h-5 text-amber-400" />
-            )}
-            <h2 className="text-base font-bold text-white font-serif uppercase tracking-wide">
-              {isSuperAdmin ? 'Panel de Dueños (Super Admin)' : 'Panel de Dirección General'}
-            </h2>
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              {isSuperAdmin ? (
+                <Crown className="w-5 h-5 text-amber-400" />
+              ) : (
+                <ShieldCheck className="w-5 h-5 text-amber-400" />
+              )}
+              <h2 className="text-base font-bold text-white font-serif uppercase tracking-wide">
+                {isSuperAdmin ? 'Panel de Dueños (Super Admin)' : 'Panel de Dirección General'}
+              </h2>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Funerales Hernández • Supervisión Integral de 3 Sucursales • Programa 90 Días
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Funerales Hernández • Supervisión Integral de 3 Sucursales • Programa 90 Días
-          </p>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setChangeMyPassError('');
+                setMyNewPassword('');
+                setMyConfirmPassword('');
+                setIsChangeMyPasswordOpen(true);
+              }}
+              className="flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold px-3 py-1.5 rounded-xl text-xs shadow-sm transition-all active:scale-95"
+              title="Cambiar mi contraseña personal de acceso"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Cambiar Mi Contraseña</span>
+            </button>
+
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
+              title="Exportar métricas a formato Excel / CSV"
+            >
+              <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Exportar CSV</span>
+            </button>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+        {/* Current Admin Session Bar */}
+        <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-400">
+              Conectado como: <strong className="text-white font-semibold">{currentUser.name}</strong> 
+              <span className="text-amber-400/90 font-mono ml-1">(@{currentUser.username || currentUser.email.split('@')[0]})</span>
+            </span>
+            <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700">
+              {isSuperAdmin ? 'Super Administrador' : 'Directivo'}
+            </span>
+          </div>
+
           <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
-            title="Exportar métricas a formato Excel / CSV"
+            onClick={() => {
+              setChangeMyPassError('');
+              setMyNewPassword('');
+              setMyConfirmPassword('');
+              setIsChangeMyPasswordOpen(true);
+            }}
+            className="text-[11px] text-amber-400 hover:text-amber-300 underline font-medium"
           >
-            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Exportar CSV</span>
+            ¿Deseas cambiar tu contraseña? Haz clic aquí
           </button>
         </div>
       </div>
@@ -1101,6 +1178,75 @@ CREATE TABLE IF NOT EXISTS daily_reports (
               );
             })}
           </div>
+
+          {/* Cuentas de Dirección y Administración */}
+          <div className="space-y-2 pt-4 border-t border-slate-800">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5" />
+              <span>Equipo de Dirección y Administración ({allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length})</span>
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').map(leader => (
+                <div
+                  key={leader.id}
+                  className="bg-slate-850 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2.5"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs">{leader.name}</span>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                        {leader.role === 'super_admin' ? 'Super Admin' : 'Dirección'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5">
+                      <span>Usuario: <strong className="font-mono text-amber-300">{leader.username || leader.name.toLowerCase()}</strong></span>
+                      <span>•</span>
+                      <span>
+                        Clave: 
+                        {editingPasswordUserId === leader.id ? (
+                          <span className="inline-flex items-center gap-1 ml-1">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={tempNewPassword}
+                              onChange={(e) => setTempNewPassword(e.target.value)}
+                              placeholder="Nueva clave"
+                              className="bg-slate-900 border border-amber-400 rounded px-1.5 py-0.5 text-[10px] font-mono text-white w-24"
+                            />
+                            <button
+                              onClick={() => handleUpdatePassword(leader.id)}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              onClick={() => setEditingPasswordUserId(null)}
+                              className="bg-slate-700 text-slate-300 px-1 py-0.5 rounded text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 ml-1">
+                            <span className="font-mono text-slate-300">••••••</span>
+                            <button
+                              onClick={() => {
+                                setEditingPasswordUserId(leader.id);
+                                setTempNewPassword(leader.password || 'admin123');
+                              }}
+                              className="text-amber-400 hover:underline text-[9px] font-semibold"
+                            >
+                              [Editar]
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1313,6 +1459,99 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Cambiar Mi Contraseña */}
+      {isChangeMyPasswordOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif">
+                  Cambiar Mi Contraseña
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsChangeMyPasswordOpen(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-300">
+              Usuario activo: <strong className="text-white">{currentUser.name}</strong> (@{currentUser.username || currentUser.email.split('@')[0]})
+            </p>
+
+            <form onSubmit={handleChangeMyPasswordSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">
+                  Nueva Contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showMyPassword ? 'text' : 'password'}
+                    required
+                    value={myNewPassword}
+                    onChange={(e) => {
+                      setMyNewPassword(e.target.value);
+                      if (changeMyPassError) setChangeMyPassError('');
+                    }}
+                    placeholder="Mínimo 4 caracteres"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-3 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowMyPassword(!showMyPassword)}
+                    className="absolute right-2.5 top-2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showMyPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">
+                  Confirmar Nueva Contraseña *
+                </label>
+                <input
+                  type={showMyPassword ? 'text' : 'password'}
+                  required
+                  value={myConfirmPassword}
+                  onChange={(e) => {
+                    setMyConfirmPassword(e.target.value);
+                    if (changeMyPassError) setChangeMyPassError('');
+                  }}
+                  placeholder="Repite tu nueva contraseña"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
+
+              {changeMyPassError && (
+                <div className="text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2 rounded-lg">
+                  {changeMyPassError}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  Guardar Contraseña
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsChangeMyPasswordOpen(false)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
