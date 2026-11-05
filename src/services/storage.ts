@@ -21,27 +21,27 @@ const STORAGE_KEYS = {
 export const INITIAL_BRANCHES: Branch[] = [
   {
     id: 'sucursal_1',
-    name: 'Sucursal 1 - Centro Histórico (Matriz)',
-    shortName: 'Centro (Matriz)',
-    address: 'Av. Juárez #450, Centro',
+    name: 'Capillas Constitución (Nueva Matriz)',
+    shortName: 'Capillas Constitución',
+    address: 'Constitución #1200, Matriz',
     phone: '442-214-5500',
     manager: 'Lic. Patricia Hernández'
   },
   {
     id: 'sucursal_2',
-    name: 'Sucursal 2 - Jardines del Valle',
-    shortName: 'Jardines',
-    address: 'Blvd. Bernardo Quintana #2100',
+    name: 'Capillas Dr. Mier y Lago de Chapala',
+    shortName: 'Dr. Mier y Chapala',
+    address: 'Dr. Mier esq. Lago de Chapala',
     phone: '442-238-1200',
     manager: 'Lic. Patricia Hernández'
   },
   {
     id: 'sucursal_3',
-    name: 'Sucursal 3 - Puerta Real / Cimatario',
-    shortName: 'Puerta Real',
-    address: 'Paseo Constituyentes #890',
+    name: 'Plan Bienestar 60+ (Capillas Dr. Mier)',
+    shortName: 'Plan Bienestar 60+',
+    address: 'Oficina Comercial General',
     phone: '442-310-7744',
-    manager: 'Lic. Patricia Hernández'
+    manager: 'Don Fernando Hernández'
   }
 ];
 
@@ -122,6 +122,112 @@ export const INITIAL_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
     phone: '4425550199',
     hireDate: '2024-01-10'
+  },
+  // Equipo Oficial de Asesores Comerciales (Nomina Funerales Hernández)
+  {
+    id: 'usr_manuel_rios',
+    name: 'Manuel Ríos González',
+    username: 'manuel.rios',
+    password: '123',
+    email: 'manuel.rios@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'RIGM780108VA8',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_maria_saldana',
+    name: 'María de Jesús Saldaña Nava',
+    username: 'maria.saldana',
+    password: '123',
+    email: 'maria.saldana@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'SANJ650315I10',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_mariano_delacruz',
+    name: 'Mariano de la Cruz Gutiérrez',
+    username: 'mariano.delacruz',
+    password: '123',
+    email: 'mariano.delacruz@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'CUGM920825AA6',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_juana',
+    name: 'Juana',
+    username: 'juana',
+    password: '123',
+    email: 'juana@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'DOCJ640812KQ4',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_yuliana_botello',
+    name: 'Yuliana Karely Botello Beltrán',
+    username: 'yuliana.botello',
+    password: '123',
+    email: 'yuliana.botello@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'BOBY000911MTSTLLA1',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_jorge_barrera',
+    name: 'Jorge Antonio Barrera Sánchez',
+    username: 'jorge.barrera',
+    password: '123',
+    email: 'jorge.barrera@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'BASJ720426128',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'usr_araceli_ramirez',
+    name: 'Araceli Ramírez Dávila',
+    username: 'araceli.ramirez',
+    password: '123',
+    email: 'araceli.ramirez@funeraleshernandez.com',
+    role: 'asesor',
+    branch: 'sucursal_1',
+    active: true,
+    phone: 'RADA610729ID0',
+    hireDate: '2026-01-01',
+    targetDailyContacts: 20,
+    targetDailyAppointments: 3,
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'
   }
 ];
 
@@ -181,7 +287,7 @@ class StorageService {
     const dummyIds = ['usr_carlos', 'usr_laura', 'usr_roberto'];
     const existingUsers = this.getItem<User[] | null>(STORAGE_KEYS.USERS, null);
 
-    if (!existingUsers) {
+    if (!existingUsers || existingUsers.length === 0) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     } else {
       // Filter out fictitious dummy users
@@ -191,21 +297,31 @@ class StorageService {
         u.name !== 'Laura Benítez' &&
         u.name !== 'Roberto Sánchez'
       );
-      // Ensure owner/admin accounts exist
+      // Ensure all 7 real advisors and leadership exist
       INITIAL_USERS.forEach(iu => {
-        if (!realUsers.some(ru => ru.id === iu.id || ru.role === iu.role)) {
+        const existingIdx = realUsers.findIndex(ru => ru.id === iu.id || ru.username === iu.username);
+        if (existingIdx === -1) {
           realUsers.push(iu);
+        } else {
+          // Keep custom passwords if edited by admin, but sync clean name & username
+          realUsers[existingIdx] = {
+            ...iu,
+            ...realUsers[existingIdx],
+            name: iu.name,
+            username: realUsers[existingIdx].username || iu.username,
+            password: realUsers[existingIdx].password || iu.password,
+            email: iu.email
+          };
         }
       });
       this.setItem(STORAGE_KEYS.USERS, realUsers);
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
+      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2] || INITIAL_USERS[0]);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.BRANCHES)) {
-      this.setItem(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
-    }
+    // Always update branches with official locations
+    this.setItem(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
     if (!localStorage.getItem(STORAGE_KEYS.PACKAGES)) {
       this.setItem(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
     }
@@ -269,11 +385,19 @@ class StorageService {
     const cleanInput = loginOrEmail.trim().toLowerCase();
     const cleanPass = passwordAttempt.trim();
 
-    const user = users.find(u => 
-      u.role === 'asesor' && 
-      u.active && 
-      (u.email.toLowerCase() === cleanInput || (u.username && u.username.toLowerCase() === cleanInput))
-    );
+    const user = users.find(u => {
+      if (u.role !== 'asesor' || !u.active) return false;
+
+      const emailMatch = u.email.toLowerCase() === cleanInput;
+      const usernameMatch = Boolean(u.username && u.username.toLowerCase() === cleanInput);
+      const nameMatch = u.name.toLowerCase() === cleanInput;
+      
+      // Match first name or prefix (e.g. "manuel" matches "manuel.rios" or "Manuel Ríos González")
+      const firstNameMatch = u.name.toLowerCase().split(' ')[0] === cleanInput;
+      const userPrefixMatch = Boolean(u.username && u.username.toLowerCase().split('.')[0] === cleanInput);
+
+      return emailMatch || usernameMatch || nameMatch || firstNameMatch || userPrefixMatch;
+    });
 
     if (!user) return null;
     const validPassword = user.password || '123';

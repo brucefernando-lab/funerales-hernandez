@@ -73,6 +73,17 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('fh_storage_change', handleStorageChange);
   }, []);
 
+  // Sync current user with session storage for advisor
+  useEffect(() => {
+    const advisorSessionId = sessionStorage.getItem('fh_advisor_session');
+    if (advisorSessionId) {
+      const adv = allUsers.find(u => u.id === advisorSessionId);
+      if (adv && currentUser.id !== advisorSessionId) {
+        switchDemoUser(advisorSessionId);
+      }
+    }
+  }, [allUsers, currentUser.id]);
+
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
     const newToast: ToastMessage = {
       id: `toast_${Date.now()}_${Math.random()}`,
