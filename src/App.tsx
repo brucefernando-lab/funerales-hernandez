@@ -195,11 +195,33 @@ export const App: React.FC = () => {
           activeTab={activeTab === 'cotizador' ? 'cotizador' : activeTab === 'metricas' ? 'metricas' : 'admin'}
           onTabChange={(tab) => setActiveTab(tab)}
           isExecutivePortal={true}
+          onOpenQuickCapture={() => handleOpenQuickCapture()}
         />
 
         <main className="flex-1 max-w-md md:max-w-6xl lg:max-w-7xl w-full mx-auto px-3.5 md:px-6 pt-3.5 md:pt-6 pb-24 md:pb-12">
           {activeTab === 'cotizador' ? (
-            <CotizadorView />
+            <CotizadorView
+              onSelectPlanToRegister={(plan, chapelId, term) => {
+                const chapelName = chapelId === 'constitucion' 
+                  ? 'Capillas Constitución' 
+                  : chapelId === 'dr_mier' 
+                  ? 'Capillas Dr. Mier' 
+                  : 'Plan Bienestar';
+
+                handleOpenQuickCapture(
+                  undefined,
+                  {
+                    id: plan.id,
+                    name: `${plan.name} (${chapelName})`,
+                    price: term ? term.total : plan.contado,
+                    chapelId,
+                    termSummary: term 
+                      ? `${term.termMonths} Meses • Semanal: $${term.weekly.toLocaleString('es-MX')}` 
+                      : 'Pago Único de Contado'
+                  }
+                );
+              }}
+            />
           ) : activeTab === 'metricas' ? (
             <MetricsView
               activities={activities}
@@ -211,6 +233,7 @@ export const App: React.FC = () => {
               sales={sales}
               onRefreshData={loadData}
               onShowToast={(msg) => showToast('Sistema Actualizado', msg, 'success')}
+              onOpenNewContact={() => handleOpenQuickCapture()}
             />
           )}
         </main>
@@ -219,7 +242,25 @@ export const App: React.FC = () => {
         <BottomNav
           activeTab={activeTab === 'cotizador' ? 'cotizador' : activeTab === 'metricas' ? 'metricas' : 'admin'}
           onTabChange={(tab) => setActiveTab(tab)}
+          onOpenQuickCapture={() => handleOpenQuickCapture()}
+          pendingTasksCount={0}
           isExecutivePortal={true}
+        />
+
+        {/* Speed Quick Capture Modal (<20 seconds) for Executive Portal */}
+        <ModalQuickCapture
+          isOpen={isQuickCaptureOpen}
+          onClose={() => {
+            setIsQuickCaptureOpen(false);
+            setCaptureInitialPackage(undefined);
+            setCaptureInitialContact(undefined);
+          }}
+          initialContact={captureInitialContact}
+          initialPackage={captureInitialPackage}
+          onSuccess={(msg) => {
+            loadData();
+            showToast('Prospecto Registrado', msg, 'success');
+          }}
         />
       </div>
     );

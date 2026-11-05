@@ -19,13 +19,15 @@ interface AdminViewProps {
   sales: Sale[];
   onRefreshData: () => void;
   onShowToast: (msg: string) => void;
+  onOpenNewContact?: () => void;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
   activities,
   sales,
   onRefreshData,
-  onShowToast
+  onShowToast,
+  onOpenNewContact
 }) => {
   const { allUsers, branches, currentUser } = useAuth();
   const isSuperAdmin = currentUser.role === 'super_admin';
@@ -995,10 +997,22 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                   Histórico permanente de la empresa. Ningún prospecto se pierde aunque un vendedor lo descarte de su CRM.
                 </p>
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 self-start sm:self-auto">
-                <Cloud className="w-3.5 h-3.5" />
-                Sincronizado con Supabase Cloud
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {onOpenNewContact && (
+                  <button
+                    type="button"
+                    onClick={onOpenNewContact}
+                    className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow active:scale-95 transition-transform"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>+ Registrar Prospecto</span>
+                  </button>
+                )}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <Cloud className="w-3.5 h-3.5" />
+                  Supabase Cloud
+                </span>
+              </div>
             </div>
 
             {/* Metric KPI Cards */}

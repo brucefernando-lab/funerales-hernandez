@@ -34,7 +34,10 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
   initialContact,
   initialPackage
 }) => {
-  const { currentUser, currentBranch } = useAuth();
+  const { currentUser, currentBranch, allUsers } = useAuth();
+  const isExecutive = currentUser.role === 'admin' || currentUser.role === 'super_admin';
+  const advisors = allUsers.filter(u => u.role === 'asesor' && u.active);
+  const [assignedUserId, setAssignedUserId] = useState<string>(currentUser.id);
   const [packages, setPackages] = useState<FuneralPackage[]>([]);
 
   // Form states
@@ -66,6 +69,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setAssignedUserId(currentUser.id);
       const pkgs = storage.getPackages().filter(p => p.active);
       setPackages(pkgs);
 
@@ -150,6 +154,9 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
 
     const selectedPkg = packages.find(p => p.id === selectedPackageId) || packages[0];
     const contactId = initialContact?.id || `cnt_${Date.now()}`;
+    const finalUserId = (isExecutive && assignedUserId) ? assignedUserId : currentUser.id;
+    const targetUser = allUsers.find(u => u.id === finalUserId);
+    const finalBranch = targetUser?.branch || currentBranch.id;
 
     // 1. Save or update Contact
     let contactStatus = 'prospecto';
@@ -159,8 +166,8 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
 
     storage.saveContact({
       id: contactId,
-      userId: currentUser.id,
-      branch: currentBranch.id,
+      userId: finalUserId,
+      branch: finalBranch,
       name: name.trim(),
       phone: phone || 'Sin registrar',
       source,
@@ -173,7 +180,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
     // 2. Save Activity
     const newActivity = {
       id: `act_${Date.now()}`,
-      userId: currentUser.id,
+      userId: finalUserId,
       contactId,
       contactName: name.trim(),
       contactPhone: phone,
@@ -193,7 +200,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       // Auto-schedule task in "Pendientes"
       storage.saveTask({
         id: `tsk_${Date.now()}`,
-        userId: currentUser.id,
+        userId: finalUserId,
         contactId,
         contactName: name.trim(),
         contactPhone: phone,
@@ -210,7 +217,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       // Schedule follow-up call
       storage.saveTask({
         id: `tsk_${Date.now()}`,
-        userId: currentUser.id,
+        userId: finalUserId,
         contactId,
         contactName: name.trim(),
         contactPhone: phone,
@@ -227,7 +234,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       const validReferrals = referrals.filter(r => r.name.trim().length > 0);
       storage.addSale({
         id: `sl_${Date.now()}`,
-        userId: currentUser.id,
+        userId: finalUserId,
         contactId,
         contactName: name.trim(),
         packageId: selectedPkg.id,
@@ -242,8 +249,8 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       validReferrals.forEach((ref, idx) => {
         storage.saveContact({
           id: `cnt_ref_${Date.now()}_${idx}`,
-          userId: currentUser.id,
-          branch: currentBranch.id,
+          userId: finalUserId,
+          branch: finalBranch,
           name: ref.name.trim(),
           phone: ref.phone.trim(),
           source: 'referido',
@@ -302,6 +309,34 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
             <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
               1. Datos del Prospecto
             </span>
+
+            {/* Asignación de Vendedor o Dirección */}
+            {isExecutive && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mb-2">
+                <label className="text-[10px] text-amber-300 font-bold block mb-1 uppercase tracking-wider flex items-center gap-1.5">
+                  <UserPlus className="w-3.5 h-3.5 text-amber-400" />
+                  Asignar Prospecto a:
+                </label>
+                <select
+                  value={assignedUserId}
+                  onChange={(e) => setAssignedUserId(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 font-medium"
+                >
+                  <option value={currentUser.id}>👑 {currentUser.name} (Dirección General)</option>
+                  <optgroup label="Asesores Comerciales">
+                    {advisors.map(adv => (
+                      <option key={adv.id} value={adv.id}>
+                        👤 {adv.name} ({adv.branch === 'sucursal_1' ? 'Constitución' : adv.branch === 'sucursal_2' ? 'Dr. Mier' : 'Bienestar 60+'})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <span className="text-[9px] text-slate-400 mt-1 block">
+                  El prospecto se registrará en el CRM del vendedor elegido y quedará guardado para Dirección y en Supabase.
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="text-[10px] text-slate-400 block mb-1">Nombre Completo *</label>

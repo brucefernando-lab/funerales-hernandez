@@ -123,15 +123,15 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Desktop Quick Capture Button (Only on advisor portal) */}
-          {!isExecutivePortal && onOpenQuickCapture && (
+          {/* Desktop Quick Capture Button */}
+          {onOpenQuickCapture && (
             <button
               onClick={onOpenQuickCapture}
               className="hidden md:flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-transform active:scale-95"
-              title="Captura rápida (<20s)"
+              title="Registrar nuevo prospecto"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ Captura</span>
+              <span>+ Prospecto</span>
             </button>
           )}
 

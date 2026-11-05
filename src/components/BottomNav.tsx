@@ -23,11 +23,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   if (isExecutivePortal) {
     return (
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/98 backdrop-blur-lg border-t border-slate-800 pb-safe shadow-2xl">
-        <div className="max-w-md mx-auto px-3 py-1.5 flex items-center justify-around">
+        <div className="max-w-md mx-auto px-2 py-1 flex items-center justify-around relative">
           {/* Tab 1: Panel Dirección */}
           <button
             onClick={() => onTabChange('admin')}
-            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+            className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
               activeTab === 'admin'
                 ? 'text-amber-400 scale-105 font-bold'
                 : 'text-slate-400 hover:text-slate-200'
@@ -43,30 +43,46 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           {/* Tab 2: Catálogo de Precios */}
           <button
             onClick={() => onTabChange('cotizador')}
-            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+            className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
               activeTab === 'cotizador'
                 ? 'text-amber-400 scale-105 font-bold'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Calculator className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Catálogo Precios</span>
+            <span className="text-[10px] tracking-tight">Catálogo</span>
             {activeTab === 'cotizador' && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
             )}
           </button>
 
+          {/* Floating Center CTA: + Prospecto */}
+          {onOpenQuickCapture && (
+            <div className="relative -top-4">
+              <button
+                onClick={onOpenQuickCapture}
+                className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-amber-600 via-amber-500 to-amber-400 text-slate-950 shadow-lg shadow-amber-500/30 flex items-center justify-center active:scale-95 transition-transform border-4 border-slate-900 focus:outline-none group"
+                title="Registrar Nuevo Prospecto"
+              >
+                <Plus className="w-6 h-6 stroke-[3] group-hover:rotate-90 transition-transform duration-200" />
+              </button>
+              <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-amber-400 uppercase tracking-tighter whitespace-nowrap">
+                + Prospecto
+              </span>
+            </div>
+          )}
+
           {/* Tab 3: Métricas Totales */}
           <button
             onClick={() => onTabChange('metricas')}
-            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
+            className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all duration-200 ${
               activeTab === 'metricas'
                 ? 'text-amber-400 scale-105 font-bold'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <BarChart3 className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Métricas Totales</span>
+            <span className="text-[10px] tracking-tight">Métricas</span>
             {activeTab === 'metricas' && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />
             )}
