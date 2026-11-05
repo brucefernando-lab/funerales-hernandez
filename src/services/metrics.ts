@@ -124,6 +124,7 @@ export function calculateAdvisor90DayMetrics(
     userId: user.id,
     userName: user.name,
     branch: user.branch,
+    active: user.active ?? true,
     totalContacts,
     totalAppointments,
     totalSales,

@@ -20,6 +20,7 @@ export const App: React.FC = () => {
   
   // URL Routing state
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname.toLowerCase());
+  const isAdminRoute = currentPath.startsWith('/admin');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('fh_admin_auth') === 'true';
   });
@@ -160,11 +161,9 @@ export const App: React.FC = () => {
   };
 
   const todayStr = getTodayDateString();
-  const pendingCount = tasks.filter(t => t.userId === currentUser.id && !t.isCompleted && t.dueDate <= todayStr).length;
+  const pendingCount = tasks.filter(t => t.userId === currentUser?.id && !t.isCompleted && t.dueDate <= todayStr).length;
 
   // ROUTE 1: /admin (Exclusive URL for Owners & Leadership)
-  const isAdminRoute = currentPath.startsWith('/admin');
-
   if (isAdminRoute) {
     if (!isAdminAuthenticated) {
       return (

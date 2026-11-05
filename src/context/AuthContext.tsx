@@ -21,7 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUserState] = useState<User>(() => storage.getCurrentUser());
   const [branches, setBranches] = useState<Branch[]>(() => storage.getBranches());
   const [allUsers, setAllUsers] = useState<User[]>(() => storage.getUsers());
-  const [selectedBranchId, setSelectedBranchId] = useState<BranchId>(() => storage.getCurrentUser().branch);
+  const [selectedBranchId, setSelectedBranchId] = useState<BranchId>(() => storage.getCurrentUser()?.branch || 'sucursal_1');
 
   const refreshUserData = () => {
     const user = storage.getCurrentUser();
@@ -79,7 +79,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (first) setCurrentUser(first);
   };
 
-  const currentBranch = branches.find(b => b.id === (currentUser.role === 'admin' ? selectedBranchId : currentUser.branch)) || branches[0];
+  const currentBranch = branches.find(b => b.id === (currentUser?.role === 'admin' ? selectedBranchId : currentUser?.branch)) || branches[0] || {
+    id: 'sucursal_1',
+    name: 'Capillas Constitución (Nueva Matriz)',
+    shortName: 'Capillas Constitución',
+    address: 'Constitución #1200, Matriz',
+    phone: '442-214-5500',
+    manager: 'Lic. Patricia Hernández'
+  };
 
   return (
     <AuthContext.Provider

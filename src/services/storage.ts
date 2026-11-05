@@ -381,7 +381,11 @@ class StorageService {
 
   public getCurrentUser(): User {
     const users = this.getUsers();
-    return this.getItem<User>(STORAGE_KEYS.CURRENT_USER, users[0] || INITIAL_USERS[0]);
+    const stored = this.getItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    if (stored && stored.id && stored.name) {
+      return stored;
+    }
+    return users[0] || INITIAL_USERS[0];
   }
 
   public setCurrentUser(user: User): void {

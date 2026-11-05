@@ -188,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <UserCircle2 className="w-4 h-4 text-sky-400" />
               <span className="text-xs font-semibold text-slate-200 hidden sm:inline">
-                {currentUser.name.split(' ')[0]}
+                {currentUser?.name ? currentUser.name.split(' ')[0] : 'Usuario'}
               </span>
               <span className="text-[10px] px-1.5 py-0.2 rounded font-bold uppercase bg-sky-500/20 text-sky-300">
                 {isExecutivePortal ? 'Dirección' : 'Asesor'}
@@ -198,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
             {showUserMenu && (
               <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1 z-50 text-xs animate-in fade-in slide-in-from-top-2">
                 <div className="px-3 py-2 border-b border-slate-800">
-                  <div className="font-bold text-white text-xs">{currentUser.name}</div>
+                  <div className="font-bold text-white text-xs">{currentUser?.name || 'Usuario'}</div>
                   <div className="text-[10px] text-slate-400">
                     {isExecutivePortal ? '👑 Dirección General' : `Asesor Comercial Multisede`}
                   </div>
