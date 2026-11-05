@@ -95,7 +95,7 @@ export const INITIAL_PACKAGES: FuneralPackage[] = [
   }
 ];
 
-// Initial Users: Owners (Super Admin), Managers, and Advisors
+// Initial Users: Owners (Super Admin) and Leadership
 export const INITIAL_USERS: User[] = [
   {
     id: 'usr_dueno',
@@ -122,51 +122,6 @@ export const INITIAL_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
     phone: '4425550199',
     hireDate: '2024-01-10'
-  },
-  {
-    id: 'usr_carlos',
-    name: 'Carlos Mendoza',
-    username: 'carlos',
-    password: '123',
-    email: 'carlos.mendoza@funeraleshernandez.com',
-    role: 'asesor',
-    branch: 'sucursal_1',
-    active: true,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    phone: '4421984521',
-    hireDate: '2026-08-01',
-    targetDailyContacts: 20,
-    targetDailyAppointments: 3
-  },
-  {
-    id: 'usr_laura',
-    name: 'Laura Benítez',
-    username: 'laura',
-    password: '123',
-    email: 'laura.benitez@funeraleshernandez.com',
-    role: 'asesor',
-    branch: 'sucursal_2',
-    active: true,
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    phone: '4423458912',
-    hireDate: '2026-08-15',
-    targetDailyContacts: 20,
-    targetDailyAppointments: 3
-  },
-  {
-    id: 'usr_roberto',
-    name: 'Roberto Sánchez',
-    username: 'roberto',
-    password: '123',
-    email: 'roberto.sanchez@funeraleshernandez.com',
-    role: 'asesor',
-    branch: 'sucursal_1',
-    active: true,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    phone: '4427891234',
-    hireDate: '2026-09-01',
-    targetDailyContacts: 20,
-    targetDailyAppointments: 3
   }
 ];
 
@@ -184,343 +139,11 @@ export function getTodayDateString(offsetDays = 0): string {
 const today = getTodayDateString();
 const yesterday = getTodayDateString(-1);
 
-export const INITIAL_CONTACTS: Contact[] = [
-  {
-    id: 'cnt_1',
-    userId: 'usr_carlos',
-    branch: 'sucursal_1',
-    name: 'Ing. Fernando Morales',
-    phone: '4424567890',
-    source: 'convenio',
-    status: 'cita',
-    createdAt: yesterday,
-    notes: 'Director de RH en Parque Industrial Bernardo Quintana. Convenio corporativo de previsión para 80 colaboradores.',
-    preferredPackageId: 'pkg_celestial',
-    tags: ['Corporativo', 'Convenio']
-  },
-  {
-    id: 'cnt_2',
-    userId: 'usr_carlos',
-    branch: 'sucursal_1',
-    name: 'Sra. Martha Elena Rivas',
-    phone: '4429876543',
-    source: 'referido',
-    status: 'prospecto',
-    createdAt: today,
-    notes: 'Referida por su cuñado. Muy interesada en cremación anticipada con Paquete Celestial.',
-    preferredPackageId: 'pkg_celestial',
-    tags: ['Cremación', 'Referido']
-  },
-  {
-    id: 'cnt_3',
-    userId: 'usr_carlos',
-    branch: 'sucursal_1',
-    name: 'Dr. Alejandro Guajardo',
-    phone: '4421112233',
-    source: 'frio',
-    status: 'cliente',
-    createdAt: yesterday,
-    notes: 'Contrató cobertura total para él y su esposa.',
-    preferredPackageId: 'pkg_celestial',
-    tags: ['Cliente Cerrado', 'High Ticket']
-  },
-  {
-    id: 'cnt_4',
-    userId: 'usr_carlos',
-    branch: 'sucursal_1',
-    name: 'Lic. Claudia Peñaloza',
-    phone: '4423334455',
-    source: 'guardia',
-    status: 'prospecto',
-    createdAt: today,
-    notes: 'Llegó a mostrador solicitando informes de previsión a futuro.',
-    preferredPackageId: 'pkg_imperial',
-    tags: ['Guardia Mostrador']
-  },
-  {
-    id: 'cnt_5',
-    userId: 'usr_laura',
-    branch: 'sucursal_2',
-    name: 'Sr. Don Guillermo Cárdenas',
-    phone: '4426667788',
-    source: 'referido',
-    status: 'cita',
-    createdAt: today,
-    notes: 'Familia tradicional de Juriquilla. Pide presentación en su domicilio particular.',
-    preferredPackageId: 'pkg_celestial',
-    tags: ['Visita Domiciliar', 'Juriquilla']
-  },
-  {
-    id: 'cnt_6',
-    userId: 'usr_laura',
-    branch: 'sucursal_2',
-    name: 'Prof. Beatriz Salgado',
-    phone: '4427778899',
-    source: 'convenio',
-    status: 'cliente',
-    createdAt: yesterday,
-    notes: 'Sindicato del Magisterio. Venta de paquete Imperial.',
-    preferredPackageId: 'pkg_imperial',
-    tags: ['Magisterio', 'Cliente']
-  },
-  {
-    id: 'cnt_7',
-    userId: 'usr_roberto',
-    branch: 'sucursal_1',
-    name: 'Arq. Esteban Vega',
-    phone: '4428889900',
-    source: 'frio',
-    status: 'prospecto',
-    createdAt: today,
-    notes: 'Llamada en frío zona Centro. Pidió que le marquemos hoy a las 5:00 PM.',
-    tags: ['Zona Centro']
-  }
-];
-
-export const INITIAL_TASKS: TaskPending[] = [
-  {
-    id: 'tsk_1',
-    userId: 'usr_carlos',
-    contactId: 'cnt_1',
-    contactName: 'Ing. Fernando Morales',
-    contactPhone: '4424567890',
-    dueDate: today,
-    dueTime: '11:30',
-    taskType: 'cita',
-    location: 'oficina',
-    isCompleted: false,
-    notes: 'Presentación formal de Paquete Celestial Cobertura Total en su oficina corporativa.',
-    createdAt: yesterday
-  },
-  {
-    id: 'tsk_2',
-    userId: 'usr_carlos',
-    contactId: 'cnt_2',
-    contactName: 'Sra. Martha Elena Rivas',
-    contactPhone: '4429876543',
-    dueDate: today,
-    dueTime: '16:00',
-    taskType: 'llamada',
-    isCompleted: false,
-    notes: 'Llamada de cortesía para confirmar asistencia a la sucursal Centro o resolver dudas de cremación.',
-    createdAt: today
-  },
-  {
-    id: 'tsk_3',
-    userId: 'usr_carlos',
-    contactId: 'cnt_4',
-    contactName: 'Lic. Claudia Peñaloza',
-    contactPhone: '4423334455',
-    dueDate: yesterday,
-    dueTime: '18:00',
-    taskType: 'llamada',
-    isCompleted: false,
-    notes: 'Enviar cotización formal por WhatsApp y confirmar recepción.',
-    createdAt: yesterday
-  },
-  {
-    id: 'tsk_4',
-    userId: 'usr_laura',
-    contactId: 'cnt_5',
-    contactName: 'Sr. Don Guillermo Cárdenas',
-    contactPhone: '4426667788',
-    dueDate: today,
-    dueTime: '12:00',
-    taskType: 'cita',
-    location: 'domicilio',
-    isCompleted: false,
-    notes: 'Visita domiciliaria en Juriquilla con catálogo de maderas finas.',
-    createdAt: today
-  },
-  {
-    id: 'tsk_5',
-    userId: 'usr_roberto',
-    contactId: 'cnt_7',
-    contactName: 'Arq. Esteban Vega',
-    contactPhone: '4428889900',
-    dueDate: today,
-    dueTime: '17:00',
-    taskType: 'llamada',
-    isCompleted: false,
-    notes: 'Llamada de seguimiento programada.',
-    createdAt: today
-  }
-];
-
-export const INITIAL_ACTIVITIES: Activity[] = [
-  {
-    id: 'act_1',
-    userId: 'usr_carlos',
-    contactId: 'cnt_2',
-    contactName: 'Sra. Martha Elena Rivas',
-    contactPhone: '4429876543',
-    activityType: 'contacto_diario',
-    source: 'referido',
-    packageOfferedId: 'pkg_celestial',
-    packageOfferedName: 'Paquete Celestial / Cobertura Total',
-    result: 'cita_agendada',
-    notes: 'Excelente respuesta al anclaje Celestial.',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'act_2',
-    userId: 'usr_carlos',
-    contactId: 'cnt_1',
-    contactName: 'Ing. Fernando Morales',
-    contactPhone: '4424567890',
-    activityType: 'cita_presentacion',
-    source: 'convenio',
-    packageOfferedId: 'pkg_celestial',
-    packageOfferedName: 'Paquete Celestial / Cobertura Total',
-    result: 'cita_agendada',
-    notes: 'Presentación ejecutiva 45 min.',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
-  },
-  {
-    id: 'act_3',
-    userId: 'usr_carlos',
-    contactId: 'cnt_3',
-    contactName: 'Dr. Alejandro Guajardo',
-    contactPhone: '4421112233',
-    activityType: 'cita_presentacion',
-    source: 'frio',
-    packageOfferedId: 'pkg_celestial',
-    packageOfferedName: 'Paquete Celestial / Cobertura Total',
-    result: 'venta_cerrada',
-    notes: 'Venta cerrada de contado con descuento por pago único.',
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
-  },
-  {
-    id: 'act_4',
-    userId: 'usr_laura',
-    contactId: 'cnt_6',
-    contactName: 'Prof. Beatriz Salgado',
-    contactPhone: '4427778899',
-    activityType: 'cita_presentacion',
-    source: 'convenio',
-    packageOfferedId: 'pkg_imperial',
-    packageOfferedName: 'Paquete Imperial / Estándar Superior',
-    result: 'venta_cerrada',
-    notes: 'Cierre con anticipo del 20%.',
-    createdAt: new Date(Date.now() - 3600000 * 3).toISOString()
-  }
-];
-
-for (let i = 1; i <= 13; i++) {
-  INITIAL_ACTIVITIES.push({
-    id: `act_carlos_seed_${i}`,
-    userId: 'usr_carlos',
-    contactId: `cnt_seed_${i}`,
-    contactName: `Prospecto Matriz ${i}`,
-    contactPhone: `44255510${String(i).padStart(2, '0')}`,
-    activityType: 'contacto_diario',
-    source: i % 2 === 0 ? 'frio' : 'convenio',
-    packageOfferedId: 'pkg_celestial',
-    packageOfferedName: 'Paquete Celestial / Cobertura Total',
-    result: i % 3 === 0 ? 'en_seguimiento' : (i % 4 === 0 ? 'descartado' : 'en_seguimiento'),
-    objection: i % 4 === 0 ? 'postergacion' : undefined,
-    notes: 'Llamada de prospección telefónica.',
-    createdAt: new Date(Date.now() - (14 - i) * 1800000).toISOString()
-  });
-}
-
-export const INITIAL_SALES: Sale[] = [
-  {
-    id: 'sl_1',
-    userId: 'usr_carlos',
-    contactId: 'cnt_3',
-    contactName: 'Dr. Alejandro Guajardo',
-    packageId: 'pkg_celestial',
-    packageName: 'Paquete Celestial / Cobertura Total',
-    amount: 49500,
-    saleDate: today,
-    referralsCount: 3,
-    referrals: [
-      { name: 'Dra. Gabriela Soto', phone: '4423338877' },
-      { name: 'Dr. Héctor Villalobos', phone: '4424449988' },
-      { name: 'Lic. Mónica Guajardo', phone: '4425556611' }
-    ]
-  },
-  {
-    id: 'sl_2',
-    userId: 'usr_laura',
-    contactId: 'cnt_6',
-    contactName: 'Prof. Beatriz Salgado',
-    packageId: 'pkg_imperial',
-    packageName: 'Paquete Imperial / Estándar Superior',
-    amount: 36800,
-    saleDate: today,
-    referralsCount: 2,
-    referrals: [
-      { name: 'Mtra. Rocío Fuentes', phone: '4429990011' },
-      { name: 'Mtro. José Luis Barajas', phone: '4428881122' }
-    ]
-  },
-  {
-    id: 'sl_3',
-    userId: 'usr_carlos',
-    contactId: 'cnt_prev_1',
-    contactName: 'Familia Carreón Nieto',
-    packageId: 'pkg_celestial',
-    packageName: 'Paquete Celestial / Cobertura Total',
-    amount: 49500,
-    saleDate: yesterday,
-    referralsCount: 2
-  },
-  {
-    id: 'sl_4',
-    userId: 'usr_roberto',
-    contactId: 'cnt_prev_2',
-    contactName: 'Lic. Tomás Valenzuela',
-    packageId: 'pkg_esencial',
-    packageName: 'Paquete Esencial / Básico Digno',
-    amount: 24500,
-    saleDate: yesterday,
-    referralsCount: 0
-  }
-];
-
-// Initial Official Daily Reports (Cortes Diarios Oficiales)
-export const INITIAL_DAILY_REPORTS: DailyReport[] = [
-  {
-    id: 'rpt_carlos_today',
-    userId: 'usr_carlos',
-    userName: 'Carlos Mendoza',
-    branch: 'sucursal_1',
-    date: today,
-    submittedAt: new Date(Date.now() - 3600000 * 1).toISOString(),
-    contactsCount: 14,
-    contactsTarget: 20,
-    appointmentsCount: 2,
-    appointmentsTarget: 3,
-    salesVolume: 49500,
-    salesCount: 1,
-    referralsCount: 3,
-    semaforo: 'verde',
-    overallScore: 88,
-    dailyNotes: 'Cierre exitoso del Paquete Celestial con Dr. Guajardo. Cita acordada con Ing. Morales para convenio corporativo.',
-    signature: 'Carlos Mendoza • Verificado'
-  },
-  {
-    id: 'rpt_laura_yesterday',
-    userId: 'usr_laura',
-    userName: 'Laura Benítez',
-    branch: 'sucursal_2',
-    date: yesterday,
-    submittedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    contactsCount: 19,
-    contactsTarget: 20,
-    appointmentsCount: 3,
-    appointmentsTarget: 3,
-    salesVolume: 36800,
-    salesCount: 1,
-    referralsCount: 2,
-    semaforo: 'verde',
-    overallScore: 95,
-    dailyNotes: 'Contrato Imperial firmado con Prof. Salgado. 2 referidos en proceso de contacto.',
-    signature: 'Laura Benítez • Verificado'
-  }
-];
+export const INITIAL_CONTACTS: Contact[] = [];
+export const INITIAL_TASKS: TaskPending[] = [];
+export const INITIAL_ACTIVITIES: Activity[] = [];
+export const INITIAL_SALES: Sale[] = [];
+export const INITIAL_DAILY_REPORTS: DailyReport[] = [];
 
 // Initial Cloud Config
 export const INITIAL_CLOUD_CONFIG: CloudSyncConfig = {
@@ -555,24 +178,30 @@ class StorageService {
   }
 
   public initialize(): void {
+    const dummyIds = ['usr_carlos', 'usr_laura', 'usr_roberto'];
     const existingUsers = this.getItem<User[] | null>(STORAGE_KEYS.USERS, null);
+
     if (!existingUsers) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     } else {
-      // Ensure all users have username and password
-      const updated = existingUsers.map(u => {
-        const init = INITIAL_USERS.find(iu => iu.id === u.id);
-        return {
-          ...u,
-          username: u.username || init?.username || u.email.split('@')[0],
-          password: u.password || init?.password || '123'
-        };
+      // Filter out fictitious dummy users
+      const realUsers = existingUsers.filter(u => 
+        !dummyIds.includes(u.id) &&
+        u.name !== 'Carlos Mendoza' &&
+        u.name !== 'Laura Benítez' &&
+        u.name !== 'Roberto Sánchez'
+      );
+      // Ensure owner/admin accounts exist
+      INITIAL_USERS.forEach(iu => {
+        if (!realUsers.some(ru => ru.id === iu.id || ru.role === iu.role)) {
+          realUsers.push(iu);
+        }
       });
-      this.setItem(STORAGE_KEYS.USERS, updated);
+      this.setItem(STORAGE_KEYS.USERS, realUsers);
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2]);
+      this.setItem(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
     }
     if (!localStorage.getItem(STORAGE_KEYS.BRANCHES)) {
       this.setItem(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
@@ -580,21 +209,23 @@ class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.PACKAGES)) {
       this.setItem(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.CONTACTS)) {
-      this.setItem(STORAGE_KEYS.CONTACTS, INITIAL_CONTACTS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.TASKS)) {
-      this.setItem(STORAGE_KEYS.TASKS, INITIAL_TASKS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.ACTIVITIES)) {
-      this.setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.SALES)) {
-      this.setItem(STORAGE_KEYS.SALES, INITIAL_SALES);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.DAILY_REPORTS)) {
-      this.setItem(STORAGE_KEYS.DAILY_REPORTS, INITIAL_DAILY_REPORTS);
-    }
+
+    // Clean any dummy records from storage
+    const contacts = this.getItem<Contact[]>(STORAGE_KEYS.CONTACTS, []).filter(c => !dummyIds.includes(c.userId));
+    this.setItem(STORAGE_KEYS.CONTACTS, contacts);
+
+    const tasks = this.getItem<TaskPending[]>(STORAGE_KEYS.TASKS, []).filter(t => !dummyIds.includes(t.userId));
+    this.setItem(STORAGE_KEYS.TASKS, tasks);
+
+    const acts = this.getItem<Activity[]>(STORAGE_KEYS.ACTIVITIES, []).filter(a => !dummyIds.includes(a.userId));
+    this.setItem(STORAGE_KEYS.ACTIVITIES, acts);
+
+    const sls = this.getItem<Sale[]>(STORAGE_KEYS.SALES, []).filter(s => !dummyIds.includes(s.userId));
+    this.setItem(STORAGE_KEYS.SALES, sls);
+
+    const rpts = this.getItem<DailyReport[]>(STORAGE_KEYS.DAILY_REPORTS, []).filter(r => !dummyIds.includes(r.userId));
+    this.setItem(STORAGE_KEYS.DAILY_REPORTS, rpts);
+
     if (!localStorage.getItem(STORAGE_KEYS.CLOUD_CONFIG)) {
       this.setItem(STORAGE_KEYS.CLOUD_CONFIG, INITIAL_CLOUD_CONFIG);
     }
@@ -606,7 +237,8 @@ class StorageService {
   }
 
   public getCurrentUser(): User {
-    return this.getItem<User>(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[2]);
+    const users = this.getUsers();
+    return this.getItem<User>(STORAGE_KEYS.CURRENT_USER, users[0] || INITIAL_USERS[0]);
   }
 
   public setCurrentUser(user: User): void {

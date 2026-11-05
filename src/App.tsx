@@ -169,8 +169,11 @@ export const App: React.FC = () => {
           isExecutivePortal={true}
           onGoToAdvisorPortal={() => {
             const firstAdv = allUsers.find(u => u.role === 'asesor');
-            if (firstAdv) switchDemoUser(firstAdv.id);
-            setIsAdvisorLoggedIn(true);
+            if (firstAdv) {
+              switchDemoUser(firstAdv.id);
+              sessionStorage.setItem('fh_advisor_session', firstAdv.id);
+              setIsAdvisorLoggedIn(true);
+            }
             navigateTo('/login');
           }}
         />
