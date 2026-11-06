@@ -605,7 +605,7 @@ CREATE TABLE IF NOT EXISTS daily_reports (
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
                 setChangeMyPassError('');
@@ -621,12 +621,21 @@ CREATE TABLE IF NOT EXISTS daily_reports (
             </button>
 
             <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
-              title="Exportar métricas a formato Excel / CSV"
+              onClick={() => handleExportContactsCSV(storage.getContacts())}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
+              title="Descargar todos los prospectos (Nombre, Teléfono, Domicilio, Correo) en Excel"
             >
               <Download className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Exportar CSV</span>
+              <span>Exportar Prospectos (Excel)</span>
+            </button>
+
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
+              title="Exportar métricas de asesores a formato Excel / CSV"
+            >
+              <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Exportar Reporte</span>
             </button>
           </div>
         </div>
