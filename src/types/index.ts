@@ -45,6 +45,8 @@ export interface Contact {
   branch: BranchId;
   name: string;
   phone: string;
+  address?: string;
+  email?: string;
   source: ContactSource;
   status: ContactStatus;
   createdAt: string;

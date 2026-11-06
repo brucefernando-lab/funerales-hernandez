@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Activity, Sale, FuneralPackage, BranchId, User, UserRole, DailyReport, CloudSyncConfig } from '../types';
+import { Activity, Sale, FuneralPackage, BranchId, User, UserRole, DailyReport, CloudSyncConfig, Contact } from '../types';
 import { 
   calculateAdvisor90DayMetrics, formatCurrency, 
   exportToCSV, Timeframe, filterByTimeframe 
@@ -12,7 +12,7 @@ import {
   TrendingUp, Settings, Edit3, Plus, Check, AlertTriangle, 
   RefreshCw, Sparkles, UserPlus, Eye, Clock, Phone, Radio, 
   Crown, Trash2, ToggleLeft, ToggleRight, ClipboardCheck, Cloud, Database, Copy, CheckCircle2,
-  KeyRound, EyeOff, Lock, UserCheck
+  KeyRound, EyeOff, Lock, UserCheck, MapPin, Mail, ExternalLink, X
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -69,6 +69,65 @@ export const AdminView: React.FC<AdminViewProps> = ({
       onRefreshData();
       onShowToast(`Prospecto "${updated.name}" asignado a ${targetUser.name} y agendado en sus pendientes de hoy.`);
     }
+  };
+
+  // Edit Contact Modal state inside AdminView
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editContactName, setEditContactName] = useState('');
+  const [editContactPhone, setEditContactPhone] = useState('');
+  const [editContactAddress, setEditContactAddress] = useState('');
+  const [editContactEmail, setEditContactEmail] = useState('');
+  const [editContactNotes, setEditContactNotes] = useState('');
+
+  const handleOpenEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditContactName(contact.name);
+    setEditContactPhone(contact.phone === 'Sin registrar' ? '' : contact.phone);
+    setEditContactAddress(contact.address || '');
+    setEditContactEmail(contact.email || '');
+    setEditContactNotes(contact.notes || '');
+  };
+
+  const handleSaveEditedContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContact || !editContactName.trim()) return;
+    storage.saveContact({
+      ...editingContact,
+      name: editContactName.trim(),
+      phone: editContactPhone.trim() || 'Sin registrar',
+      address: editContactAddress.trim() || undefined,
+      email: editContactEmail.trim().toLowerCase() || undefined,
+      notes: editContactNotes.trim() || undefined
+    });
+    setEditingContact(null);
+    onRefreshData();
+    onShowToast(`Ficha de "${editContactName.trim()}" actualizada.`);
+  };
+
+  const handleExportContactsCSV = (contactsList: Contact[]) => {
+    if (contactsList.length === 0) {
+      alert('No hay prospectos para exportar con los filtros actuales.');
+      return;
+    }
+    const rows = contactsList.map(c => {
+      const advisor = allUsers.find(u => u.id === c.userId);
+      const branchObj = branches.find(b => b.id === c.branch);
+      return {
+        'Nombre del Prospecto': c.name,
+        'Teléfono': c.phone,
+        'Domicilio / Dirección': c.address || 'Sin registrar',
+        'Correo Electrónico': c.email || 'Sin registrar',
+        'Estatus Comercial': c.status.toUpperCase(),
+        'Origen': c.source.toUpperCase(),
+        'Vendedor Asignado': advisor ? advisor.name : 'Dirección General',
+        'Sucursal': branchObj ? branchObj.name : c.branch,
+        'Estado en Cartera': c.deletedByAdvisor ? 'DESCARTADO (RESGUARDADO)' : 'ACTIVO EN CRM',
+        'Fecha de Registro': c.createdAt,
+        'Notas / Bitácora': c.notes || ''
+      };
+    });
+    exportToCSV(`Cartera_Prospectos_Funerales_Hernandez_${todayStr}`, rows);
+    onShowToast(`Excel descargado con ${contactsList.length} prospectos.`);
   };
 
   // State for creating new salesperson
@@ -323,6 +382,8 @@ CREATE TABLE IF NOT EXISTS contacts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_interaction TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deleted_by_advisor BOOLEAN DEFAULT FALSE;
@@ -1081,7 +1142,9 @@ CREATE TABLE IF NOT EXISTS daily_reports (
           const q = contactsSearch.toLowerCase();
           filtered = filtered.filter(c => 
             c.name.toLowerCase().includes(q) || 
-            c.phone.includes(q)
+            c.phone.includes(q) ||
+            Boolean(c.address && c.address.toLowerCase().includes(q)) ||
+            Boolean(c.email && c.email.toLowerCase().includes(q))
           );
         }
 
@@ -1098,7 +1161,16 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                   Histórico permanente de la empresa. Ningún prospecto se pierde aunque un vendedor lo descarte de su CRM.
                 </p>
               </div>
-              <div className="flex items-center gap-2 self-start sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleExportContactsCSV(filtered)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow active:scale-95 transition-transform"
+                  title="Descargar base de datos de prospectos en formato Excel (CSV)"
+                >
+                  <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Exportar Prospectos a Excel</span>
+                </button>
                 {onOpenNewContact && (
                   <button
                     type="button"
@@ -1143,12 +1215,12 @@ CREATE TABLE IF NOT EXISTS daily_reports (
             {/* Filter Bar */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Buscar por Nombre o Teléfono:</label>
+                <label className="text-[10px] text-slate-400 block mb-1">Buscar (Nombre, Teléfono, Domicilio o Correo):</label>
                 <input
                   type="text"
                   value={contactsSearch}
                   onChange={(e) => setContactsSearch(e.target.value)}
-                  placeholder="Ej. Carlos, 867..."
+                  placeholder="Ej. Carlos, 867, Col. Centro, correo..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                 />
               </div>
@@ -1236,19 +1308,59 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                                 {contact.phone}
                               </a>
                             </div>
+                            {contact.address && (
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-300">
+                                <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>{contact.address}</span>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-amber-400 hover:underline font-semibold inline-flex items-center gap-0.5 ml-1"
+                                  title="Ver en Google Maps"
+                                >
+                                  <span>[Mapa]</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              </div>
+                            )}
+                            {contact.email && (
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-sky-300">
+                                <Mail className="w-3 h-3 text-sky-400 shrink-0" />
+                                <a href={`mailto:${contact.email}`} className="hover:underline">
+                                  {contact.email}
+                                </a>
+                              </div>
+                            )}
+                            {contact.notes && (
+                              <div className="text-[10px] text-slate-400 italic mt-1">
+                                "{contact.notes}"
+                              </div>
+                            )}
                           </div>
 
-                          {isDeleted && (
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
                             <button
                               type="button"
-                              onClick={() => handleRestoreContact(contact.id)}
-                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow flex items-center gap-1 shrink-0"
-                              title="Regresar prospecto a la cartera activa del asesor"
+                              onClick={() => handleOpenEditContact(contact)}
+                              className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 flex items-center gap-1"
+                              title="Editar nombre, teléfono, domicilio o correo"
                             >
-                              <RefreshCw className="w-3 h-3" />
-                              Reactivar
+                              <Edit3 className="w-3 h-3" />
+                              <span>Editar</span>
                             </button>
-                          )}
+                            {isDeleted && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreContact(contact.id)}
+                                className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow flex items-center gap-1"
+                                title="Regresar prospecto a la cartera activa del asesor"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Reactivar
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-2 text-[10px] text-slate-400">
@@ -1835,6 +1947,102 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar Ficha del Prospecto (Admin) */}
+      {editingContact && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif">
+                  Editar Datos del Prospecto
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingContact(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedContact} className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Nombre Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={editContactName}
+                  onChange={(e) => setEditContactName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Teléfono Móvil (10 dígitos)</label>
+                <input
+                  type="tel"
+                  value={editContactPhone}
+                  onChange={(e) => setEditContactPhone(e.target.value.replace(/[^\d]/g, '').slice(0, 10))}
+                  placeholder="4421234567"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Domicilio / Colonia</label>
+                <input
+                  type="text"
+                  value={editContactAddress}
+                  onChange={(e) => setEditContactAddress(e.target.value)}
+                  placeholder="Calle, número, colonia y referencias"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  value={editContactEmail}
+                  onChange={(e) => setEditContactEmail(e.target.value)}
+                  placeholder="cliente@correo.com"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Notas / Observaciones</label>
+                <textarea
+                  rows={2}
+                  value={editContactNotes}
+                  onChange={(e) => setEditContactNotes(e.target.value)}
+                  placeholder="Notas sobre interés del cliente, horario preferido, etc."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 shadow-md"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Guardar Cambios</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingContact(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Phone, User as UserIcon, Calendar, Clock, MapPin, 
-  DollarSign, Sparkles, UserPlus, Trash2, CheckCircle2, AlertCircle 
+  DollarSign, Sparkles, UserPlus, Trash2, CheckCircle2, AlertCircle, Mail, Home 
 } from 'lucide-react';
 import { 
   ContactSource, ActivityType, InteractionResult, 
@@ -23,7 +23,7 @@ interface ModalQuickCaptureProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
-  initialContact?: { name: string; phone: string; id?: string };
+  initialContact?: { name: string; phone: string; id?: string; address?: string; email?: string };
   initialPackage?: InitialPackageData;
 }
 
@@ -43,6 +43,9 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
   // Form states
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [email, setEmail] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<string>('');
   const [source, setSource] = useState<ContactSource>('frio');
   const [activityType, setActivityType] = useState<ActivityType>('contacto_diario');
   const [selectedPackageId, setSelectedPackageId] = useState<string>('pkg_celestial');
@@ -90,29 +93,50 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       }
 
       if (initialContact) {
+        const existing = initialContact.id ? storage.getContacts().find(c => c.id === initialContact.id) : undefined;
         setName(initialContact.name);
         setPhone(initialContact.phone);
+        setAddress(initialContact.address || existing?.address || '');
+        setEmail(initialContact.email || existing?.email || '');
       } else {
         setName('');
         setPhone('');
+        setAddress('');
+        setEmail('');
         if (!initialPackage) setNotes('');
         setResult('en_seguimiento');
         setReferrals([{ name: '', phone: '' }]);
       }
       setPhoneError('');
+      setDuplicateWarning('');
     }
   }, [isOpen, initialContact, initialPackage]);
 
   if (!isOpen) return null;
 
   const handlePhoneChange = (val: string) => {
-    // Keep numbers and dashes
     const cleaned = val.replace(/[^\d]/g, '').slice(0, 10);
     setPhone(cleaned);
     if (cleaned.length > 0 && cleaned.length < 10) {
       setPhoneError('Ingresa 10 dígitos (ej. 4421234567)');
+      setDuplicateWarning('');
     } else {
       setPhoneError('');
+      if (cleaned.length === 10 && !initialContact?.id) {
+        const existing = storage.getContacts().find(
+          c => c.phone.replace(/[^\d]/g, '') === cleaned
+        );
+        if (existing) {
+          const ownerUser = allUsers.find(u => u.id === existing.userId);
+          setDuplicateWarning(
+            `⚠️ Este teléfono ya está registrado a nombre de "${existing.name}" (Asesor: ${ownerUser?.name || 'Dirección'}).`
+          );
+        } else {
+          setDuplicateWarning('');
+        }
+      } else {
+        setDuplicateWarning('');
+      }
     }
   };
 
@@ -164,16 +188,19 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
     else if (result === 'venta_cerrada') contactStatus = 'cliente';
     else if (result === 'descartado') contactStatus = 'descartado';
 
+    const prevContact = initialContact?.id ? storage.getContacts().find(c => c.id === initialContact.id) : undefined;
     storage.saveContact({
       id: contactId,
       userId: finalUserId,
       branch: finalBranch,
       name: name.trim(),
       phone: phone || 'Sin registrar',
+      address: address.trim() || prevContact?.address || undefined,
+      email: email.trim().toLowerCase() || prevContact?.email || undefined,
       source,
       status: contactStatus as any,
-      createdAt: getTodayDateString(),
-      notes: notes.trim(),
+      createdAt: prevContact?.createdAt || getTodayDateString(),
+      notes: notes.trim() || prevContact?.notes,
       lastInteraction: new Date().toISOString()
     });
 
@@ -367,6 +394,42 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
                   />
                 </div>
                 {phoneError && <span className="text-[10px] text-rose-400 mt-1 block">{phoneError}</span>}
+              </div>
+            </div>
+
+            {duplicateWarning && (
+              <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 rounded-lg p-2 text-[10px] font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>{duplicateWarning}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Domicilio / Colonia (Opcional)</label>
+                <div className="relative">
+                  <Home className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Calle, Número y Colonia"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Correo Electrónico (Opcional)</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="cliente@correo.com"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
             </div>
           </div>

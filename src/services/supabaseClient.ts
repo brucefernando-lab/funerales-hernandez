@@ -124,9 +124,22 @@ function toRows(kind: SyncKind, d: any): { full: any; base?: any } {
         deleted_at: d.deletedAt || null,
         created_at: d.createdAt || new Date().toISOString()
       };
+      // Pack address & email inside notes as structured metadata if needed so they sync even without extra SQL columns
+      let packedNotes: string | null = d.notes || null;
+      const metaParts: string[] = [];
+      if (d.address && String(d.address).trim()) metaParts.push(`DOM:${String(d.address).trim()}`);
+      if (d.email && String(d.email).trim()) metaParts.push(`EMAIL:${String(d.email).trim()}`);
+      if (metaParts.length > 0) {
+        const cleanNotes = (d.notes || '').replace(/^\[META:[^\]]*\]\s*/, '');
+        packedNotes = `[META:${metaParts.join('||')}] ${cleanNotes}`.trim();
+      }
       return {
         base,
-        full: { ...base, notes: d.notes || null, last_interaction: d.lastInteraction || null }
+        full: {
+          ...base,
+          notes: packedNotes,
+          last_interaction: d.lastInteraction || null
+        }
       };
     }
     case 'activity': {
@@ -361,20 +374,38 @@ export async function pullCloudData(): Promise<CloudSnapshot | null> {
 
   return {
     users: u.rows.map(mapUser),
-    contacts: c.rows.map((row: any): P<Contact> => ({
-      id: row.id,
-      userId: nn(row.user_id),
-      branch: nn(row.branch),
-      name: nn(row.name),
-      phone: nn(row.phone),
-      source: nn(row.source),
-      status: nn(row.status),
-      deletedByAdvisor: Boolean(row.deleted_by_advisor),
-      deletedAt: nn(row.deleted_at),
-      createdAt: normalizeDate(row.created_at),
-      notes: nn(row.notes),
-      lastInteraction: nn(row.last_interaction)
-    })),
+    contacts: c.rows.map((row: any): P<Contact> => {
+      let rawNotes: string | undefined = nn(row.notes);
+      let parsedAddress: string | undefined = nn(row.address);
+      let parsedEmail: string | undefined = nn(row.email);
+      if (rawNotes && rawNotes.startsWith('[META:')) {
+        const endBracket = rawNotes.indexOf(']');
+        if (endBracket > 6) {
+          const metaStr = rawNotes.substring(6, endBracket);
+          rawNotes = rawNotes.substring(endBracket + 1).trim() || undefined;
+          metaStr.split('||').forEach(part => {
+            if (part.startsWith('DOM:') && !parsedAddress) parsedAddress = part.substring(4).trim();
+            if (part.startsWith('EMAIL:') && !parsedEmail) parsedEmail = part.substring(6).trim();
+          });
+        }
+      }
+      return {
+        id: row.id,
+        userId: nn(row.user_id),
+        branch: nn(row.branch),
+        name: nn(row.name),
+        phone: nn(row.phone),
+        address: parsedAddress,
+        email: parsedEmail,
+        source: nn(row.source),
+        status: nn(row.status),
+        deletedByAdvisor: Boolean(row.deleted_by_advisor),
+        deletedAt: nn(row.deleted_at),
+        createdAt: normalizeDate(row.created_at),
+        notes: rawNotes,
+        lastInteraction: nn(row.last_interaction)
+      };
+    }),
     activities: a.rows.map((row: any): P<Activity> => ({
       id: row.id,
       userId: nn(row.user_id),
