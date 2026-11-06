@@ -31,7 +31,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onOpenNewContact
 }) => {
   const { allUsers, branches, currentUser } = useAuth();
-  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isBruceMaster = currentUser.id === 'usr_bruce' || currentUser.username?.toLowerCase() === 'bruce' || currentUser.role === 'super_admin';
+  const isSuperAdmin = isBruceMaster;
   const todayStr = getTodayDateString();
   
   // Filters
@@ -110,7 +111,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
       return;
     }
     const rows = contactsList.map(c => {
-      const advisor = allUsers.find(u => u.id === c.userId);
+      const rawAdvisor = allUsers.find(u => u.id === c.userId);
+      const advisor = (!isBruceMaster && (rawAdvisor?.id === 'usr_bruce' || rawAdvisor?.role === 'super_admin')) ? undefined : rawAdvisor;
       const branchObj = branches.find(b => b.id === c.branch);
       return {
         'Nombre del Prospecto': c.name,
@@ -129,6 +131,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
     exportToCSV(`Cartera_Prospectos_Funerales_Hernandez_${todayStr}`, rows);
     onShowToast(`Excel descargado con ${contactsList.length} prospectos.`);
   };
+
+  // State for creating new Administrator (Exclusive to Bruce Master)
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('admin123');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPhone, setNewAdminPhone] = useState('');
 
   // State for creating new salesperson
   const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false);
@@ -258,18 +268,60 @@ export const AdminView: React.FC<AdminViewProps> = ({
     onShowToast(`Vendedor "${newAdvName.trim()}" dado de alta exitosamente con usuario: ${generatedUsername}`);
   };
 
+  const handleCreateAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isBruceMaster) return;
+    if (!newAdminName.trim()) {
+      alert('Ingresa el nombre del nuevo administrador.');
+      return;
+    }
+
+    const generatedUsername = newAdminUsername.trim().toLowerCase() || newAdminName.trim().toLowerCase().split(' ')[0];
+    const generatedEmail = newAdminEmail.trim().toLowerCase() || `${generatedUsername}@funeraleshernandez.com`;
+
+    storage.createUser({
+      name: newAdminName.trim(),
+      username: generatedUsername,
+      password: newAdminPassword.trim() || 'admin123',
+      email: generatedEmail,
+      phone: newAdminPhone.trim() || '4420000000',
+      branch: 'sucursal_1',
+      role: 'admin',
+      active: true,
+      hireDate: getTodayDateString(),
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    });
+
+    onRefreshData();
+    setIsCreatingAdmin(false);
+    setNewAdminName('');
+    setNewAdminUsername('');
+    setNewAdminPassword('admin123');
+    setNewAdminEmail('');
+    setNewAdminPhone('');
+    onShowToast(`Administrador "${newAdminName.trim()}" creado exitosamente (usuario: ${generatedUsername}).`);
+  };
+
   const handleUpdatePassword = (userId: string) => {
     const user = allUsers.find(u => u.id === userId);
-    if (user && tempNewPassword.trim()) {
-      storage.updateUser({
-        ...user,
-        password: tempNewPassword.trim()
-      });
+    if (!user || !tempNewPassword.trim()) return;
+
+    // Security check: Regular admins can ONLY change their own password or an advisor's password; never another admin's password
+    const isTargetAdmin = user.role === 'admin' || user.role === 'super_admin';
+    if (isTargetAdmin && !isBruceMaster && user.id !== currentUser.id) {
+      alert('Por seguridad, cada directivo solo puede cambiar su propia contraseña.');
       setEditingPasswordUserId(null);
-      setTempNewPassword('');
-      onRefreshData();
-      onShowToast(`Contraseña actualizada para ${user.name}`);
+      return;
     }
+
+    storage.updateUser({
+      ...user,
+      password: tempNewPassword.trim()
+    });
+    setEditingPasswordUserId(null);
+    setTempNewPassword('');
+    onRefreshData();
+    onShowToast(`Contraseña actualizada para ${user.name}`);
   };
 
   const handleChangeMyPasswordSubmit = (e: React.FormEvent) => {
@@ -1381,11 +1433,13 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                                   ))}
                                 </optgroup>
                                 <optgroup label="Dirección General">
-                                  {allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').map(adm => (
-                                    <option key={adm.id} value={adm.id}>
-                                      👑 {adm.name} (Dirección)
-                                    </option>
-                                  ))}
+                                  {allUsers
+                                    .filter(u => (u.role === 'admin' || u.role === 'super_admin') && (isBruceMaster || (u.id !== 'usr_bruce' && u.username?.toLowerCase() !== 'bruce' && u.role !== 'super_admin')))
+                                    .map(adm => (
+                                      <option key={adm.id} value={adm.id}>
+                                        👑 {adm.name} (Dirección)
+                                      </option>
+                                    ))}
                                 </optgroup>
                               </select>
                             </div>
@@ -1668,73 +1722,223 @@ CREATE TABLE IF NOT EXISTS daily_reports (
           </div>
 
           {/* Cuentas de Dirección y Administración */}
-          <div className="space-y-2 pt-4 border-t border-slate-800">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
-              <Crown className="w-3.5 h-3.5" />
-              <span>Equipo de Dirección y Administración ({allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length})</span>
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').map(leader => (
-                <div
-                  key={leader.id}
-                  className="bg-slate-850 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2.5"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-xs">{leader.name}</span>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase">
-                        {leader.role === 'super_admin' ? 'Super Admin' : 'Dirección'}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5">
-                      <span>Usuario: <strong className="font-mono text-amber-300">{leader.username || leader.name.toLowerCase()}</strong></span>
-                      <span>•</span>
-                      <span>
-                        Clave: 
-                        {editingPasswordUserId === leader.id ? (
-                          <span className="inline-flex items-center gap-1 ml-1">
-                            <input
-                              type="text"
-                              autoFocus
-                              value={tempNewPassword}
-                              onChange={(e) => setTempNewPassword(e.target.value)}
-                              placeholder="Nueva clave"
-                              className="bg-slate-900 border border-amber-400 rounded px-1.5 py-0.5 text-[10px] font-mono text-white w-24"
-                            />
-                            <button
-                              onClick={() => handleUpdatePassword(leader.id)}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold"
-                            >
-                              Guardar
-                            </button>
-                            <button
-                              onClick={() => setEditingPasswordUserId(null)}
-                              className="bg-slate-700 text-slate-300 px-1 py-0.5 rounded text-[10px]"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 ml-1">
-                            <span className="font-mono text-slate-300">••••••</span>
-                            <button
-                              onClick={() => {
-                                setEditingPasswordUserId(leader.id);
-                                setTempNewPassword(leader.password || 'admin123');
-                              }}
-                              className="text-amber-400 hover:underline text-[9px] font-semibold"
-                            >
-                              [Editar]
-                            </button>
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
+          {(() => {
+            const visibleLeaders = allUsers.filter(u => {
+              if (u.role !== 'admin' && u.role !== 'super_admin') return false;
+              // Bruce is 100% invisible to all other admins
+              if (!isBruceMaster && (u.id === 'usr_bruce' || u.username?.toLowerCase() === 'bruce' || u.role === 'super_admin')) {
+                return false;
+              }
+              return true;
+            });
+
+            return (
+              <div className="space-y-3 pt-4 border-t border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>Equipo de Dirección y Administración ({visibleLeaders.length})</span>
+                  </span>
+
+                  {/* Botón Exclusivo para Bruce: + Agregar Administrador */}
+                  {isBruceMaster && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingAdmin(!isCreatingAdmin)}
+                      className="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>{isCreatingAdmin ? 'Cerrar' : '+ Agregar Administrador'}</span>
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
+
+                {/* Formulario Exclusivo de Bruce para crear Administradores */}
+                {isBruceMaster && isCreatingAdmin && (
+                  <form onSubmit={handleCreateAdmin} className="p-3.5 bg-slate-850 rounded-xl border border-amber-500/50 space-y-3 text-xs animate-in fade-in">
+                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5" />
+                      Nuevo Administrador / Directivo (Exclusivo Super Admin)
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Nombre del Directivo *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAdminName}
+                          onChange={(e) => {
+                            setNewAdminName(e.target.value);
+                            if (!newAdminUsername) {
+                              setNewAdminUsername(e.target.value.toLowerCase().trim().split(' ')[0]);
+                            }
+                          }}
+                          placeholder="Ej. Fernando Hernández"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Usuario de Acceso *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAdminUsername}
+                          onChange={(e) => setNewAdminUsername(e.target.value.toLowerCase().trim())}
+                          placeholder="Ej. fernando"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Contraseña Inicial *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAdminPassword}
+                          onChange={(e) => setNewAdminPassword(e.target.value)}
+                          placeholder="Ej. admin123"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Correo Electrónico (Opcional)</label>
+                        <input
+                          type="email"
+                          value={newAdminEmail}
+                          onChange={(e) => setNewAdminEmail(e.target.value)}
+                          placeholder="fernando@funeraleshernandez.com"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="pt-1 flex gap-2">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 font-bold py-2 rounded-xl text-xs uppercase"
+                      >
+                        Crear Cuenta de Administrador
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsCreatingAdmin(false)}
+                        className="px-3 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {visibleLeaders.map(leader => {
+                    const isSelf = leader.id === currentUser.id;
+                    const canEditLeaderPass = isBruceMaster || isSelf;
+
+                    return (
+                      <div
+                        key={leader.id}
+                        className={`bg-slate-850 border rounded-xl p-3 flex items-center justify-between gap-2.5 ${
+                          isSelf ? 'border-amber-500/40' : 'border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-xs">{leader.name}</span>
+                            <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                              {leader.role === 'super_admin' ? 'Creador / Master (Invisible)' : 'Dirección'}
+                            </span>
+                            {isSelf && (
+                              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+                                Tú
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span>Usuario: <strong className="font-mono text-amber-300">{leader.username || leader.name.toLowerCase()}</strong></span>
+                            <span>•</span>
+                            <span>
+                              Clave: 
+                              {canEditLeaderPass ? (
+                                editingPasswordUserId === leader.id ? (
+                                  <span className="inline-flex items-center gap-1 ml-1">
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={tempNewPassword}
+                                      onChange={(e) => setTempNewPassword(e.target.value)}
+                                      placeholder="Nueva clave"
+                                      className="bg-slate-900 border border-amber-400 rounded px-1.5 py-0.5 text-[10px] font-mono text-white w-24"
+                                    />
+                                    <button
+                                      onClick={() => handleUpdatePassword(leader.id)}
+                                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                    >
+                                      Guardar
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingPasswordUserId(null)}
+                                      className="bg-slate-700 text-slate-300 px-1 py-0.5 rounded text-[10px]"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 ml-1">
+                                    <span className="font-mono text-slate-300">
+                                      {isBruceMaster ? (leader.password || 'admin123') : '••••••'}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        setEditingPasswordUserId(leader.id);
+                                        setTempNewPassword(leader.password || 'admin123');
+                                      }}
+                                      className="text-amber-400 hover:underline text-[9px] font-semibold"
+                                    >
+                                      [Cambiar mi clave]
+                                    </button>
+                                  </span>
+                                )
+                              ) : (
+                                <span className="inline-flex items-center gap-1 ml-1 text-slate-500">
+                                  <Lock className="w-3 h-3 text-slate-500" />
+                                  <span>Privada (Personal)</span>
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Bruce Master puede activar/desactivar o eliminar otros administradores */}
+                        {isBruceMaster && leader.id !== 'usr_bruce' && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUserActive(leader.id)}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                              title={leader.active ? 'Pausar administrador' : 'Activar administrador'}
+                            >
+                              {leader.active ? (
+                                <ToggleRight className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <ToggleLeft className="w-4 h-4 text-rose-400" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(leader.id, leader.name)}
+                              className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-lg text-xs"
+                              title="Eliminar administrador"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

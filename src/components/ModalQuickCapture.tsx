@@ -128,8 +128,12 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
         );
         if (existing) {
           const ownerUser = allUsers.find(u => u.id === existing.userId);
+          const isBruceOwner = ownerUser?.id === 'usr_bruce' || ownerUser?.role === 'super_admin';
+          const displayOwnerName = (!isBruceOwner || currentUser.id === 'usr_bruce' || currentUser.role === 'super_admin')
+            ? (ownerUser?.name || 'Dirección')
+            : 'Dirección General';
           setDuplicateWarning(
-            `⚠️ Este teléfono ya está registrado a nombre de "${existing.name}" (Asesor: ${ownerUser?.name || 'Dirección'}).`
+            `⚠️ Este teléfono ya está registrado a nombre de "${existing.name}" (Asesor: ${displayOwnerName}).`
           );
         } else {
           setDuplicateWarning('');
