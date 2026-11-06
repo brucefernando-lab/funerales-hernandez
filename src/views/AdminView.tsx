@@ -12,7 +12,7 @@ import {
   TrendingUp, Settings, Edit3, Plus, Check, AlertTriangle, 
   RefreshCw, Sparkles, UserPlus, Eye, Clock, Phone, Radio, 
   Crown, Trash2, ToggleLeft, ToggleRight, ClipboardCheck, Cloud, Database, Copy, CheckCircle2,
-  KeyRound, EyeOff, Lock, UserCheck, MapPin, Mail, ExternalLink, X
+  KeyRound, EyeOff, Lock, UserCheck, MapPin, Mail, ExternalLink, X, Calendar
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -105,31 +105,138 @@ export const AdminView: React.FC<AdminViewProps> = ({
     onShowToast(`Ficha de "${editContactName.trim()}" actualizada.`);
   };
 
-  const handleExportContactsCSV = (contactsList: Contact[]) => {
-    if (contactsList.length === 0) {
-      alert('No hay prospectos para exportar con los filtros actuales.');
-      return;
+  // Calendar Date-Range Export Modal State
+  const [exportModalMode, setExportModalMode] = useState<'prospectos' | 'reporte' | null>(null);
+  const [exportDateFrom, setExportDateFrom] = useState<string>(() => getTodayDateString(-30));
+  const [exportDateTo, setExportDateTo] = useState<string>(() => getTodayDateString());
+  const [exportAllDates, setExportAllDates] = useState<boolean>(false);
+  const [exportAdvisorFilter, setExportAdvisorFilter] = useState<string>('todos');
+  const [exportStatusFilter, setExportStatusFilter] = useState<'todos' | 'activos' | 'eliminados'>('todos');
+
+  const openExportModal = (mode: 'prospectos' | 'reporte') => {
+    setExportModalMode(mode);
+    setExportAllDates(false);
+    setExportDateFrom(getTodayDateString(-30));
+    setExportDateTo(getTodayDateString());
+    setExportAdvisorFilter('todos');
+    setExportStatusFilter('todos');
+  };
+
+  const applyExportPreset = (preset: 'hoy' | 'ayer' | 'semana' | 'mes' | 'todo') => {
+    const today = getTodayDateString();
+    if (preset === 'todo') {
+      setExportAllDates(true);
+      setExportDateFrom('2026-01-01');
+      setExportDateTo(today);
+    } else if (preset === 'hoy') {
+      setExportAllDates(false);
+      setExportDateFrom(today);
+      setExportDateTo(today);
+    } else if (preset === 'ayer') {
+      const y = getTodayDateString(-1);
+      setExportAllDates(false);
+      setExportDateFrom(y);
+      setExportDateTo(y);
+    } else if (preset === 'semana') {
+      setExportAllDates(false);
+      setExportDateFrom(getTodayDateString(-7));
+      setExportDateTo(today);
+    } else if (preset === 'mes') {
+      setExportAllDates(false);
+      setExportDateFrom(getTodayDateString(-30));
+      setExportDateTo(today);
     }
-    const rows = contactsList.map(c => {
-      const rawAdvisor = allUsers.find(u => u.id === c.userId);
-      const advisor = (!isBruceMaster && (rawAdvisor?.id === 'usr_bruce' || rawAdvisor?.role === 'super_admin')) ? undefined : rawAdvisor;
-      const branchObj = branches.find(b => b.id === c.branch);
-      return {
-        'Nombre del Prospecto': c.name,
-        'Teléfono': c.phone,
-        'Domicilio / Dirección': c.address || 'Sin registrar',
-        'Correo Electrónico': c.email || 'Sin registrar',
-        'Estatus Comercial': c.status.toUpperCase(),
-        'Origen': c.source.toUpperCase(),
-        'Vendedor Asignado': advisor ? advisor.name : 'Dirección General',
-        'Sucursal': branchObj ? branchObj.name : c.branch,
-        'Estado en Cartera': c.deletedByAdvisor ? 'DESCARTADO (RESGUARDADO)' : 'ACTIVO EN CRM',
-        'Fecha de Registro': c.createdAt,
-        'Notas / Bitácora': c.notes || ''
-      };
-    });
-    exportToCSV(`Cartera_Prospectos_Funerales_Hernandez_${todayStr}`, rows);
-    onShowToast(`Excel descargado con ${contactsList.length} prospectos.`);
+  };
+
+  const getFilteredContactsForExport = (): Contact[] => {
+    let list = storage.getContacts();
+    if (!exportAllDates) {
+      const from = exportDateFrom || '2000-01-01';
+      const to = exportDateTo || '2099-12-31';
+      list = list.filter(c => {
+        const d = (c.createdAt || '').substring(0, 10);
+        return d >= from && d <= to;
+      });
+    }
+    if (exportAdvisorFilter !== 'todos') {
+      list = list.filter(c => c.userId === exportAdvisorFilter);
+    }
+    if (exportStatusFilter === 'activos') {
+      list = list.filter(c => !c.deletedByAdvisor);
+    } else if (exportStatusFilter === 'eliminados') {
+      list = list.filter(c => Boolean(c.deletedByAdvisor));
+    }
+    return list;
+  };
+
+  const handleConfirmExportModal = () => {
+    if (exportModalMode === 'prospectos') {
+      const list = getFilteredContactsForExport();
+      if (list.length === 0) {
+        alert('No se encontraron prospectos en el rango de fechas seleccionado.');
+        return;
+      }
+      const rows = list.map(c => {
+        const rawAdvisor = allUsers.find(u => u.id === c.userId);
+        const advisor = (!isBruceMaster && (rawAdvisor?.id === 'usr_bruce' || rawAdvisor?.role === 'super_admin')) ? undefined : rawAdvisor;
+        const branchObj = branches.find(b => b.id === c.branch);
+        return {
+          'Fecha de Registro': (c.createdAt || '').substring(0, 10),
+          'Nombre del Prospecto': c.name,
+          'Teléfono': c.phone,
+          'Domicilio / Dirección': c.address || 'Sin registrar',
+          'Correo Electrónico': c.email || 'Sin registrar',
+          'Estatus Comercial': c.status.toUpperCase(),
+          'Origen': c.source.toUpperCase(),
+          'Vendedor Asignado': advisor ? advisor.name : 'Dirección General',
+          'Sucursal': branchObj ? branchObj.name : c.branch,
+          'Estado en Cartera': c.deletedByAdvisor ? 'DESCARTADO (RESGUARDADO)' : 'ACTIVO EN CRM',
+          'Notas / Bitácora': c.notes || ''
+        };
+      });
+      const rangeLabel = exportAllDates ? 'Historico_Completo' : `${exportDateFrom}_a_${exportDateTo}`;
+      exportToCSV(`Prospectos_Funerales_Hernandez_${rangeLabel}`, rows);
+      setExportModalMode(null);
+      onShowToast(`Excel descargado con ${list.length} prospectos (${exportAllDates ? 'Todo el histórico' : `${exportDateFrom} a ${exportDateTo}`}).`);
+    } else if (exportModalMode === 'reporte') {
+      const from = exportAllDates ? '2000-01-01' : (exportDateFrom || '2000-01-01');
+      const to = exportAllDates ? '2099-12-31' : (exportDateTo || '2099-12-31');
+      const actsInRange = activities.filter(a => {
+        const d = (a.createdAt || '').substring(0, 10);
+        return d >= from && d <= to;
+      });
+      const salesInRange = sales.filter(s => {
+        const d = (s.saleDate || '').substring(0, 10);
+        return d >= from && d <= to;
+      });
+      const targetAdvisors = exportAdvisorFilter === 'todos'
+        ? advisors
+        : advisors.filter(a => a.id === exportAdvisorFilter);
+
+      const rows = targetAdvisors.map(adv => {
+        const stat = calculateAdvisor90DayMetrics(adv, actsInRange, salesInRange);
+        const branchName = branches.find(b => b.id === stat.branch)?.name || stat.branch;
+        return {
+          'Periodo Exportado': exportAllDates ? 'Histórico Completo' : `${from} al ${to}`,
+          Empresa: 'Funerales Hernández',
+          Asesor: stat.userName,
+          Sucursal: branchName,
+          'Semáforo 90 Días': stat.statusLabel,
+          'Cumplimiento Bitácora (%)': `${stat.logCompliancePercent}%`,
+          'Contactos en Periodo': stat.totalContacts,
+          'Citas en Periodo': stat.totalAppointments,
+          'Contratos Cerrados': stat.totalSales,
+          'Volumen Facturado ($)': stat.salesVolume,
+          'Ticket Promedio ($)': stat.averageTicket,
+          'Tasa Conversión (%)': `${stat.conversionRate}%`,
+          'Enfoque Anclaje (%)': `${stat.anchorFocusRate}%`
+        };
+      });
+      const rangeLabel = exportAllDates ? 'Historico_Completo' : `${from}_a_${to}`;
+      exportToCSV(`Reporte_Directivo_Funerales_Hernandez_${rangeLabel}`, rows);
+      setExportModalMode(null);
+      onShowToast(`Reporte Excel descargado (${exportAllDates ? 'Todo el histórico' : `${from} a ${to}`}).`);
+    }
   };
 
   // State for creating new Administrator (Exclusive to Bruce Master)
@@ -621,7 +728,7 @@ CREATE TABLE IF NOT EXISTS daily_reports (
             </button>
 
             <button
-              onClick={() => handleExportContactsCSV(storage.getContacts())}
+              onClick={() => openExportModal('prospectos')}
               className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
               title="Descargar todos los prospectos (Nombre, Teléfono, Domicilio, Correo) en Excel"
             >
@@ -630,7 +737,7 @@ CREATE TABLE IF NOT EXISTS daily_reports (
             </button>
 
             <button
-              onClick={handleExportCSV}
+              onClick={() => openExportModal('reporte')}
               className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95"
               title="Exportar métricas de asesores a formato Excel / CSV"
             >
@@ -1225,7 +1332,7 @@ CREATE TABLE IF NOT EXISTS daily_reports (
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                 <button
                   type="button"
-                  onClick={() => handleExportContactsCSV(filtered)}
+                  onClick={() => openExportModal('prospectos')}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow active:scale-95 transition-transform"
                   title="Descargar base de datos de prospectos en formato Excel (CSV)"
                 >
@@ -2163,6 +2270,202 @@ CREATE TABLE IF NOT EXISTS daily_reports (
           </div>
         </div>
       )}
+
+      {/* Modal: Exportar a Excel con Calendario de Rango de Fechas */}
+      {exportModalMode && (() => {
+        const previewContactsCount = exportModalMode === 'prospectos' ? getFilteredContactsForExport().length : 0;
+        const from = exportAllDates ? '2000-01-01' : (exportDateFrom || '2000-01-01');
+        const to = exportAllDates ? '2099-12-31' : (exportDateTo || '2099-12-31');
+        const previewActivitiesCount = exportModalMode === 'reporte'
+          ? activities.filter(a => {
+              const d = (a.createdAt || '').substring(0, 10);
+              const matchAdv = exportAdvisorFilter === 'todos' || a.userId === exportAdvisorFilter;
+              return matchAdv && d >= from && d <= to;
+            }).length
+          : 0;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif">
+                      {exportModalMode === 'prospectos'
+                        ? 'Exportar Prospectos a Excel por Fecha'
+                        : 'Exportar Reporte Directivo por Fecha'}
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      Selecciona el calendario con el rango exacto de fechas
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setExportModalMode(null)}
+                  className="text-slate-400 hover:text-white p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Atajos Rápidos de Fecha */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                  1. Selección Rápida o Rango Personalizado:
+                </label>
+                <div className="grid grid-cols-5 gap-1">
+                  {[
+                    { id: 'hoy', label: 'Hoy' },
+                    { id: 'ayer', label: 'Ayer' },
+                    { id: 'semana', label: '7 Días' },
+                    { id: 'mes', label: '30 Días' },
+                    { id: 'todo', label: 'Todo' }
+                  ].map(p => {
+                    const isActive =
+                      (p.id === 'todo' && exportAllDates) ||
+                      (!exportAllDates && p.id === 'hoy' && exportDateFrom === todayStr && exportDateTo === todayStr);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => applyExportPreset(p.id as any)}
+                        className={`py-1.5 px-1 rounded-lg font-semibold text-[11px] transition-all border ${
+                          isActive
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Calendarios Desde / Hasta */}
+              <div className="grid grid-cols-2 gap-2.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1 font-medium">
+                    📅 Fecha Inicial (Desde):
+                  </label>
+                  <input
+                    type="date"
+                    value={exportDateFrom}
+                    disabled={exportAllDates}
+                    onChange={(e) => {
+                      setExportAllDates(false);
+                      setExportDateFrom(e.target.value);
+                    }}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1 font-medium">
+                    📅 Fecha Final (Hasta):
+                  </label>
+                  <input
+                    type="date"
+                    value={exportDateTo}
+                    disabled={exportAllDates}
+                    onChange={(e) => {
+                      setExportAllDates(false);
+                      setExportDateTo(e.target.value);
+                    }}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {/* Filtros opcionales adicionales */}
+              <div className="space-y-2.5">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">
+                    Filtrar por Vendedor (Opcional):
+                  </label>
+                  <select
+                    value={exportAdvisorFilter}
+                    onChange={(e) => setExportAdvisorFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  >
+                    <option value="todos">Todos los Vendedores y Dirección</option>
+                    {advisors.map(adv => (
+                      <option key={adv.id} value={adv.id}>👤 {adv.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {exportModalMode === 'prospectos' && (
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">
+                      Estado en Cartera:
+                    </label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { id: 'todos', label: 'Todos' },
+                        { id: 'activos', label: 'Solo Activos' },
+                        { id: 'eliminados', label: 'Descartados' }
+                      ].map(st => (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => setExportStatusFilter(st.id as any)}
+                          className={`py-1.5 rounded-lg text-[11px] font-medium border ${
+                            exportStatusFilter === st.id
+                              ? 'bg-amber-500 text-slate-950 font-bold border-amber-500'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Contador en Vivo */}
+              <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between">
+                <div className="text-[11px] text-slate-300">
+                  {exportModalMode === 'prospectos' ? (
+                    <>
+                      Prospectos en este rango:{' '}
+                      <strong className="text-emerald-400 font-mono text-sm">{previewContactsCount}</strong>
+                    </>
+                  ) : (
+                    <>
+                      Actividades registradas en rango:{' '}
+                      <strong className="text-emerald-400 font-mono text-sm">{previewActivitiesCount}</strong>
+                    </>
+                  )}
+                </div>
+                <span className="text-[10px] text-emerald-300 font-mono">
+                  {exportAllDates ? 'Todo el histórico' : `${exportDateFrom} → ${exportDateTo}`}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleConfirmExportModal}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all active:scale-95"
+                >
+                  <Download className="w-4 h-4 stroke-[2.5]" />
+                  <span>Descargar Archivo Excel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportModalMode(null)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal: Editar Ficha del Prospecto (Admin) */}
       {editingContact && (
