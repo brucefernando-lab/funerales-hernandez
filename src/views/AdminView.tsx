@@ -62,6 +62,15 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const handleReassignContact = (contactId: string, newAdvisorId: string) => {
+    const updated = storage.reassignContact(contactId, newAdvisorId);
+    const targetUser = allUsers.find(u => u.id === newAdvisorId);
+    if (updated && targetUser) {
+      onRefreshData();
+      onShowToast(`Prospecto "${updated.name}" asignado a ${targetUser.name} y agendado en sus pendientes de hoy.`);
+    }
+  };
+
   // State for creating new salesperson
   const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false);
   const [newAdvName, setNewAdvName] = useState('');
@@ -1242,20 +1251,45 @@ CREATE TABLE IF NOT EXISTS daily_reports (
                           )}
                         </div>
 
-                        <div className="mt-2 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2">
-                          <div>
-                            <span className="text-slate-500">Asesor: </span>
-                            <span className="text-white font-medium">{advisor ? advisor.name : 'No asignado'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Estatus: </span>
-                            <span className="capitalize text-amber-400/90 font-semibold">{contact.status}</span>
-                          </div>
-                          {contact.deletedAt && (
-                            <div className="text-amber-400/80 text-[9px]">
-                              Descartado: {contact.deletedAt.split('T')[0]}
+                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-2 text-[10px] text-slate-400">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                              <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span className="text-slate-400 font-semibold shrink-0">Asignar / Pasar a:</span>
+                              <select
+                                value={contact.userId}
+                                onChange={(e) => handleReassignContact(contact.id, e.target.value)}
+                                className="flex-1 bg-slate-900 border border-amber-500/40 hover:border-amber-400 rounded-lg px-2 py-1 text-[11px] text-white font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                              >
+                                <optgroup label="Vendedores / Asesores Comerciales">
+                                  {advisors.map(adv => (
+                                    <option key={adv.id} value={adv.id}>
+                                      👤 {adv.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="Dirección General">
+                                  {allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').map(adm => (
+                                    <option key={adm.id} value={adm.id}>
+                                      👑 {adm.name} (Dirección)
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              </select>
                             </div>
-                          )}
+
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <span className="text-slate-500">Estatus: </span>
+                                <span className="capitalize text-amber-400/90 font-semibold">{contact.status}</span>
+                              </div>
+                              {contact.deletedAt && (
+                                <div className="text-amber-400/80 text-[9px]">
+                                  Descartado: {contact.deletedAt.split('T')[0]}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );

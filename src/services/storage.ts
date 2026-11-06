@@ -676,6 +676,65 @@ class StorageService {
     }
   }
 
+  // Reassign an existing contact (and its pending tasks & activities) to a different advisor
+  public reassignContact(contactId: string, newUserId: string): Contact | null {
+    const users = this.getUsers();
+    const targetUser = users.find(u => u.id === newUserId);
+    if (!targetUser) return null;
+
+    const contacts = this.getContacts();
+    const idx = contacts.findIndex(c => c.id === contactId);
+    if (idx < 0) return null;
+
+    const updatedContact: Contact = {
+      ...contacts[idx],
+      userId: targetUser.id,
+      branch: targetUser.branch,
+      deletedByAdvisor: false,
+      deletedAt: undefined
+    };
+    contacts[idx] = updatedContact;
+    this.setItem(STORAGE_KEYS.CONTACTS, contacts);
+    enqueueSync('contact', updatedContact.id, updatedContact);
+
+    // Also transfer pending tasks of this contact so they show up in the new advisor's agenda
+    const tasks = this.getTasks();
+    let tasksChanged = false;
+    const updatedTasks = tasks.map(t => {
+      if (t.contactId === contactId && !t.isCompleted) {
+        tasksChanged = true;
+        const ut = { ...t, userId: targetUser.id };
+        enqueueSync('task', ut.id, ut);
+        return ut;
+      }
+      return t;
+    });
+    if (tasksChanged) {
+      this.setItem(STORAGE_KEYS.TASKS, updatedTasks);
+    }
+
+    // If the contact doesn't have an active pending task yet, create a follow-up task for today so the advisor sees it immediately in "Hoy" & "Pendientes"
+    const hasActiveTask = updatedTasks.some(t => t.contactId === contactId && !t.isCompleted);
+    if (!hasActiveTask && targetUser.role === 'asesor') {
+      const followUpTask: TaskPending = {
+        id: `tsk_assign_${Date.now()}`,
+        userId: targetUser.id,
+        contactId: updatedContact.id,
+        contactName: updatedContact.name,
+        contactPhone: updatedContact.phone,
+        taskType: 'llamada',
+        dueDate: getTodayDateString(),
+        dueTime: '11:00',
+        notes: updatedContact.notes || 'Prospecto asignado por Dirección General para seguimiento.',
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+      };
+      this.saveTask(followUpTask);
+    }
+
+    return updatedContact;
+  }
+
   // Activities
   public getActivities(): Activity[] {
     return this.getItem<Activity[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
