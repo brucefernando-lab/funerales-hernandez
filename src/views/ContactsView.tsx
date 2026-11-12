@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Contact } from '../types';
+import { Contact, TaskLocation, TaskPending } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { storage } from '../services/storage';
+import { storage, getTodayDateString } from '../services/storage';
 import { 
   Search, Phone, MessageCircle, Plus, Users, Trash2, 
-  MapPin, Mail, Edit3, X, Check, ExternalLink 
+  MapPin, Mail, Edit3, X, Check, ExternalLink, Calendar, Clock 
 } from 'lucide-react';
 
 interface ContactsViewProps {
@@ -31,6 +31,20 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   const [editEmail, setEditEmail] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
+  // Appointment / Task state inside Edit Modal
+  const [editHasAppointment, setEditHasAppointment] = useState(false);
+  const [editAppointmentTaskId, setEditAppointmentTaskId] = useState<string | null>(null);
+  const [editAppointmentDate, setEditAppointmentDate] = useState(getTodayDateString());
+  const [editAppointmentTime, setEditAppointmentTime] = useState('11:00');
+  const [editAppointmentLocation, setEditAppointmentLocation] = useState<TaskLocation>('sucursal');
+
+  const allTasks = storage.getTasks();
+
+  const getActiveTaskForContact = (contactId: string): TaskPending | undefined => {
+    const tasksForContact = allTasks.filter(t => t.contactId === contactId && !t.isCompleted);
+    return tasksForContact.find(t => t.taskType === 'cita') || tasksForContact[0];
+  };
+
   // Filter contacts belonging to current advisor (excluding archived/deleted by advisor)
   const userContacts = contacts.filter(c => c.userId === currentUser.id && !c.deletedByAdvisor);
 
@@ -53,19 +67,64 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     setEditAddress(contact.address || '');
     setEditEmail(contact.email || '');
     setEditNotes(contact.notes || '');
+
+    const activeTask = getActiveTaskForContact(contact.id);
+    if (activeTask) {
+      setEditHasAppointment(true);
+      setEditAppointmentTaskId(activeTask.id);
+      setEditAppointmentDate(activeTask.dueDate || getTodayDateString());
+      setEditAppointmentTime(activeTask.dueTime || '11:00');
+      setEditAppointmentLocation(activeTask.location || 'sucursal');
+    } else {
+      setEditHasAppointment(contact.status === 'cita');
+      setEditAppointmentTaskId(null);
+      setEditAppointmentDate(getTodayDateString());
+      setEditAppointmentTime('11:00');
+      setEditAppointmentLocation('sucursal');
+    }
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingContact || !editName.trim()) return;
+
+    const updatedStatus = editHasAppointment
+      ? 'cita'
+      : editingContact.status;
+
     storage.saveContact({
       ...editingContact,
       name: editName.trim(),
       phone: editPhone.trim() || 'Sin registrar',
       address: editAddress.trim() || undefined,
       email: editEmail.trim().toLowerCase() || undefined,
-      notes: editNotes.trim() || undefined
+      notes: editNotes.trim() || undefined,
+      status: updatedStatus
     });
+
+    if (editHasAppointment) {
+      const existingTask = editAppointmentTaskId
+        ? allTasks.find(t => t.id === editAppointmentTaskId)
+        : undefined;
+
+      storage.saveTask({
+        id: existingTask ? existingTask.id : `tsk_${Date.now()}`,
+        userId: editingContact.userId,
+        contactId: editingContact.id,
+        contactName: editName.trim(),
+        contactPhone: editPhone.trim() || 'Sin registrar',
+        dueDate: editAppointmentDate,
+        dueTime: editAppointmentTime,
+        taskType: 'cita',
+        location: editAppointmentLocation,
+        isCompleted: false,
+        notes: editNotes.trim() || existingTask?.notes || `Cita agendada (${editAppointmentLocation.toUpperCase()})`,
+        createdAt: existingTask ? existingTask.createdAt : new Date().toISOString()
+      });
+    } else if (editAppointmentTaskId) {
+      storage.completeTask(editAppointmentTaskId);
+    }
+
     setEditingContact(null);
   };
 
@@ -142,6 +201,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
             const mapsUrl = contact.address
               ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`
               : undefined;
+            const activeTask = getActiveTaskForContact(contact.id);
 
             return (
               <div
@@ -178,13 +238,35 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                       type="button"
                       onClick={() => handleOpenEdit(contact)}
                       className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700"
-                      title="Editar datos del prospecto"
+                      title="Editar datos y cita del prospecto"
                     >
                       <Edit3 className="w-3 h-3" />
                       <span>Editar</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Cita / Seguimiento Programado */}
+                {activeTask && (
+                  <div className="bg-blue-950/30 border border-blue-500/30 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-blue-300">
+                      <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>
+                        <strong className="uppercase">{activeTask.taskType === 'cita' ? 'Cita' : 'Seguimiento'}:</strong>{' '}
+                        <span className="font-mono font-bold text-white">{activeTask.dueDate}</span> a las{' '}
+                        <span className="font-mono font-bold text-amber-300">{activeTask.dueTime || '11:00'}</span>
+                        {activeTask.location ? ` (${activeTask.location})` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(contact)}
+                      className="text-[10px] text-amber-400 hover:underline font-semibold shrink-0"
+                    >
+                      [Cambiar]
+                    </button>
+                  </div>
+                )}
 
                 {(contact.address || contact.email) && (
                   <div className="space-y-1 pt-1 text-[11px] text-slate-300">
@@ -277,15 +359,15 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         )}
       </div>
 
-      {/* Modal: Editar Datos del Prospecto */}
+      {/* Modal: Editar Datos y Cita del Prospecto */}
       {editingContact && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-amber-400" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-white font-serif">
-                  Editar Ficha del Prospecto
+                  Editar Prospecto y Cita Programada
                 </h3>
               </div>
               <button
@@ -319,26 +401,106 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Domicilio / Colonia</label>
-                <input
-                  type="text"
-                  value={editAddress}
-                  onChange={(e) => setEditAddress(e.target.value)}
-                  placeholder="Calle, número, colonia y referencias"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Domicilio / Colonia</label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="Calle, número y colonia"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Correo Electrónico</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="cliente@correo.com"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Correo Electrónico</label>
-                <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  placeholder="cliente@correo.com"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-                />
+              {/* Sección de Cita Programada (Fecha, Hora y Lugar) */}
+              <div className="bg-blue-950/25 border border-blue-500/30 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    Cita Programada (Fecha y Hora)
+                  </span>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-amber-300">
+                    <input
+                      type="checkbox"
+                      checked={editHasAppointment}
+                      onChange={(e) => setEditHasAppointment(e.target.checked)}
+                      className="rounded border-slate-600 text-amber-500 focus:ring-amber-400"
+                    />
+                    <span>{editHasAppointment ? 'Cita Activa' : 'Agendar Cita'}</span>
+                  </label>
+                </div>
+
+                {editHasAppointment ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-300 block mb-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-blue-400" />
+                          Fecha de la Cita:
+                        </label>
+                        <input
+                          type="date"
+                          value={editAppointmentDate}
+                          onChange={(e) => setEditAppointmentDate(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-300 block mb-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-blue-400" />
+                          Hora de la Cita:
+                        </label>
+                        <input
+                          type="time"
+                          value={editAppointmentTime}
+                          onChange={(e) => setEditAppointmentTime(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-300 block mb-1">Lugar de la Cita:</label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'sucursal', label: 'En Capilla' },
+                          { id: 'domicilio', label: 'A Domicilio' },
+                          { id: 'oficina', label: 'Oficina Cliente' }
+                        ].map(loc => (
+                          <button
+                            key={loc.id}
+                            type="button"
+                            onClick={() => setEditAppointmentLocation(loc.id as TaskLocation)}
+                            className={`py-1.5 rounded-lg text-[10px] font-semibold border transition-all ${
+                              editAppointmentLocation === loc.id
+                                ? 'bg-blue-500/30 border-blue-400 text-white'
+                                : 'bg-slate-800 border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            {loc.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    Marca la casilla "Agendar Cita" arriba si deseas programar o modificar fecha y hora de cita para este prospecto.
+                  </p>
+                )}
               </div>
 
               <div>
