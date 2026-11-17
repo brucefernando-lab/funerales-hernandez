@@ -87,7 +87,7 @@ export function getSyncStatus(): { pending: number; failing: number; lastError?:
 
 // ---------- Conversión a filas de Supabase ----------
 
-function toRows(kind: SyncKind, d: any): { full: any; base?: any } {
+function toRows(kind: SyncKind, d: any): { full: any; base?: any; legacy?: any } {
   switch (kind) {
     case 'user': {
       const base = {
@@ -124,18 +124,30 @@ function toRows(kind: SyncKind, d: any): { full: any; base?: any } {
         deleted_at: d.deletedAt || null,
         created_at: d.createdAt || new Date().toISOString()
       };
-      // Pack address & email inside notes as structured metadata if needed so they sync even without extra SQL columns
-      let packedNotes: string | null = d.notes || null;
+      const cleanNotes: string | null =
+        (d.notes || '').replace(/^\[META:[^\]]*\]\s*/, '').trim() || null;
+
+      // Formato anterior (compatibilidad): domicilio y correo empacados dentro de notes.
+      // Solo se usa si la nube todavía NO tiene las columnas `address` y `email`.
+      let packedNotes: string | null = cleanNotes;
       const metaParts: string[] = [];
       if (d.address && String(d.address).trim()) metaParts.push(`DOM:${String(d.address).trim()}`);
       if (d.email && String(d.email).trim()) metaParts.push(`EMAIL:${String(d.email).trim()}`);
       if (metaParts.length > 0) {
-        const cleanNotes = (d.notes || '').replace(/^\[META:[^\]]*\]\s*/, '');
-        packedNotes = `[META:${metaParts.join('||')}] ${cleanNotes}`.trim();
+        packedNotes = `[META:${metaParts.join('||')}] ${cleanNotes || ''}`.trim();
       }
+
       return {
         base,
+        // Formato actual: columnas propias address / email y notas limpias.
         full: {
+          ...base,
+          address: d.address && String(d.address).trim() ? String(d.address).trim() : null,
+          email: d.email && String(d.email).trim() ? String(d.email).trim() : null,
+          notes: cleanNotes,
+          last_interaction: d.lastInteraction || null
+        },
+        legacy: {
           ...base,
           notes: packedNotes,
           last_interaction: d.lastInteraction || null
@@ -244,9 +256,13 @@ function isNetworkError(message: string): boolean {
 
 async function pushItem(item: QueueItem): Promise<{ ok: boolean; error?: string }> {
   const table = TABLE[item.kind];
-  const { full, base } = toRows(item.kind, item.data);
+  const { full, base, legacy } = toRows(item.kind, item.data);
   try {
     let { error } = await supabase.from(table).upsert(full, { onConflict: 'id' });
+    if (error && legacy && isMissingColumn(error)) {
+      // Sin columnas address/email en la nube: se usa el formato anterior (empacado en notes).
+      ({ error } = await supabase.from(table).upsert(legacy, { onConflict: 'id' }));
+    }
     if (error && base && isMissingColumn(error)) {
       // La nube aún no tiene las columnas nuevas: se sube lo básico y se re-sube completo después.
       ({ error } = await supabase.from(table).upsert(base, { onConflict: 'id' }));
@@ -485,7 +501,7 @@ export async function seedUsersIfMissing(users: User[]): Promise<void> {
 
 const PROBES: Record<string, string> = {
   users: 'id,phone,target_contacts,target_appointments,hire_date',
-  contacts: 'id,notes,last_interaction',
+  contacts: 'id,notes,last_interaction,address,email',
   activities: 'id,contact_name,contact_phone,source,package_offered_name',
   tasks: 'id,task_type,location,completed_at',
   sales: 'id,referrals',
