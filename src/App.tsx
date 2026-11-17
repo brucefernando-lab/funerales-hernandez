@@ -288,6 +288,7 @@ export const App: React.FC = () => {
             onRescheduleTask={handleRescheduleTask}
             onNavigateToTasks={() => setActiveTab('pendientes')}
             onNavigateToCotizador={() => setActiveTab('cotizador')}
+            onNavigateToContacts={() => setActiveTab('contactos')}
             onCorteSubmitted={() => {
               loadData();
               showToast('Corte Diario Asentado', 'Tu reporte de jornada oficial ha quedado registrado en la plataforma.', 'success');

@@ -20,6 +20,7 @@ interface TodayViewProps {
   onRescheduleTask: (task: TaskPending, newDate: string, newTime: string) => void;
   onNavigateToTasks: () => void;
   onNavigateToCotizador?: () => void;
+  onNavigateToContacts?: () => void;
   onCorteSubmitted?: () => void;
 }
 
@@ -32,6 +33,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onRescheduleTask,
   onNavigateToTasks,
   onNavigateToCotizador,
+  onNavigateToContacts,
   onCorteSubmitted
 }) => {
   const { currentUser, currentBranch } = useAuth();
@@ -407,9 +409,20 @@ export const TodayView: React.FC<TodayViewProps> = ({
           {/* Bitácora Reciente de Hoy */}
           {recentActivities.length > 0 && (
             <div className="space-y-2 pt-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                Últimos Registros del Día
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Últimos Registros del Día
+                </span>
+                {onNavigateToContacts && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToContacts}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 underline-offset-2 hover:underline"
+                  >
+                    Ver / Editar en Cartera →
+                  </button>
+                )}
+              </div>
               <div className="bg-slate-900 border border-slate-800 rounded-2xl divide-y divide-slate-800 overflow-hidden text-xs">
                 {recentActivities.map((act) => (
                   <div key={act.id} className="p-3 flex items-center justify-between">

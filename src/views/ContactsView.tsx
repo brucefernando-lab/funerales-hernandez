@@ -132,18 +132,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     <div className="space-y-4 pb-24 text-slate-100">
       
       {/* Title */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-white font-serif uppercase tracking-wide">
+          <h2 className="text-lg font-bold text-white font-serif uppercase tracking-wide">
             Cartera de Contactos
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-300">
             {userContacts.length} prospectos y clientes en seguimiento
           </p>
         </div>
         <button
           onClick={onOpenNewCapture}
-          className="text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 px-3 py-1.5 rounded-xl shadow-md transition-colors"
+          className="text-xs sm:text-sm font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 px-3.5 py-2 rounded-xl shadow-md transition-colors shrink-0"
         >
           + Nuevo
         </button>
@@ -151,13 +151,13 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
       {/* Search */}
       <div className="relative">
-        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Buscar por nombre, teléfono, domicilio, colonia o correo..."
-          className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+          placeholder="Buscar por nombre, teléfono, domicilio o correo..."
+          className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
         />
       </div>
 
@@ -208,10 +208,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                 key={contact.id}
                 className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-2 hover:border-slate-700 transition-colors"
               >
-                <div className="flex items-start justify-between">
-                  <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wide ${
                         contact.status === 'cliente' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
                         contact.status === 'cita' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
                         contact.status === 'descartado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
@@ -219,28 +219,28 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                       }`}>
                         {contact.status}
                       </span>
-                      <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700 capitalize">
+                      <span className="text-[11px] bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full border border-slate-700 capitalize">
                         Origen: {contact.source}
                       </span>
                     </div>
 
-                    <h3 className="text-sm font-bold text-white font-serif mt-1">
+                    <h3 className="text-base font-bold text-white font-serif mt-1.5 leading-snug">
                       {contact.name}
                     </h3>
-                    <p className="text-xs text-slate-400 font-mono">{contact.phone}</p>
+                    <p className="text-sm text-slate-300 font-mono mt-0.5">{contact.phone}</p>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-[10px] text-slate-500">
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className="text-[11px] text-slate-400">
                       Reg: {contact.createdAt}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(contact)}
-                      className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700"
+                      className="text-xs font-bold text-amber-300 hover:text-amber-200 flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 rounded-xl border border-amber-500/40 transition-colors"
                       title="Editar datos y cita del prospecto"
                     >
-                      <Edit3 className="w-3 h-3" />
+                      <Edit3 className="w-3.5 h-3.5" />
                       <span>Editar</span>
                     </button>
                   </div>

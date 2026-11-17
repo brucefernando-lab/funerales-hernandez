@@ -225,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Navigation Tabs for Executive Portal (Visible on screens < 768px) */}
         {isExecutivePortal && onTabChange && (
-          <div className="flex md:hidden items-center justify-between gap-1 w-full pt-1.5 border-t border-slate-800/80">
+          <div className="flex md:hidden items-center justify-between gap-1.5 w-full pt-2 border-t border-slate-800/80">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -233,17 +233,35 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
-                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                      : 'bg-slate-800/90 text-slate-100 hover:bg-slate-800'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <Icon className="w-4 h-4 shrink-0" />
                   <span className="truncate">{item.label}</span>
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {/* Mobile Quick Bar for Advisor Portal: Cartera / Editar Prospectos (Visible on screens < 768px) */}
+        {!isExecutivePortal && onTabChange && (
+          <div className="flex md:hidden items-center justify-between gap-2 w-full pt-2 border-t border-slate-800/80">
+            <button
+              type="button"
+              onClick={() => onTabChange('contactos')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
+                activeTab === 'contactos'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm'
+                  : 'bg-slate-800/90 text-amber-300 border-amber-500/30 hover:bg-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4 shrink-0" />
+              <span>Cartera de Prospectos (Ver / Editar)</span>
+            </button>
           </div>
         )}
       </div>
