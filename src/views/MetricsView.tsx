@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { isAnchorPackageId } from '../data/officialPriceList';
 import { Activity, Sale, SemaforoStatus } from '../types';
 import { 
   calculateAdvisor90DayMetrics, formatCurrency, 
@@ -53,7 +54,7 @@ export const MetricsView: React.FC<MetricsViewProps> = ({ activities, sales, isE
     const conversionRate90 = (totalContacts90 + totalAppointments90) > 0
       ? Number(((totalSales90 / (totalContacts90 + totalAppointments90)) * 100).toFixed(1))
       : 0;
-    const anchorActs = scopedActivities.filter(a => a.packageOfferedId === 'pkg_celestial').length;
+    const anchorActs = scopedActivities.filter(a => isAnchorPackageId(a.packageOfferedId)).length;
     const anchorFocusRate90 = scopedActivities.length > 0
       ? Math.round((anchorActs / scopedActivities.length) * 100)
       : 0;

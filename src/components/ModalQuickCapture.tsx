@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { storage, getTodayDateString } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
+import { OFFICIAL_PRICE_CATALOG } from '../data/officialPriceList';
 import confetti from 'canvas-confetti';
 
 export interface InitialPackageData {
@@ -49,6 +50,11 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
   const [source, setSource] = useState<ContactSource>('frio');
   const [activityType, setActivityType] = useState<ActivityType>('contacto_diario');
   const [selectedPackageId, setSelectedPackageId] = useState<string>('pkg_celestial');
+
+  // Capilla y plan oficial (catálogo de precios). Si se elige, tiene prioridad sobre el paquete genérico.
+  const [officialChapelId, setOfficialChapelId] = useState<string>('');
+  const [officialPlanId, setOfficialPlanId] = useState<string>('');
+  const [officialTerm, setOfficialTerm] = useState<number>(0); // 0 = contado
   const [result, setResult] = useState<InteractionResult>('en_seguimiento');
 
   // Result: Cita Agendada
@@ -76,7 +82,22 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       const pkgs = storage.getPackages().filter(p => p.active);
       setPackages(pkgs);
 
+      // Reinicia la selección oficial y la restaura si viene del Cotizador
+      setOfficialChapelId('');
+      setOfficialPlanId('');
+      setOfficialTerm(0);
       if (initialPackage) {
+        const chapelOfPlan = OFFICIAL_PRICE_CATALOG.find(c =>
+          c.plans.some(pl => pl.id === initialPackage.id) &&
+          (!initialPackage.chapelId || c.id === initialPackage.chapelId)
+        ) || OFFICIAL_PRICE_CATALOG.find(c => c.plans.some(pl => pl.id === initialPackage.id));
+        const officialPlan = chapelOfPlan?.plans.find(pl => pl.id === initialPackage.id);
+        if (chapelOfPlan && officialPlan) {
+          setOfficialChapelId(chapelOfPlan.id);
+          setOfficialPlanId(officialPlan.id);
+          const matchedTerm = officialPlan.terms.find(t => Math.abs(t.total - initialPackage.price) < 0.5);
+          setOfficialTerm(matchedTerm ? matchedTerm.termMonths : 0);
+        }
         setSelectedPackageId(initialPackage.id);
         setSaleAmount(initialPackage.price);
         setActivityType('cita_presentacion');
@@ -145,11 +166,53 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
   };
 
   const handlePackageSelect = (pkgId: string) => {
+    // Elegir un paquete genérico desactiva la selección oficial
+    setOfficialChapelId('');
+    setOfficialPlanId('');
+    setOfficialTerm(0);
     setSelectedPackageId(pkgId);
     const p = packages.find(item => item.id === pkgId);
     if (p) {
       setSaleAmount(p.price);
     }
+  };
+
+  const officialChapel = OFFICIAL_PRICE_CATALOG.find(c => c.id === officialChapelId);
+  const officialPlan = officialChapel?.plans.find(pl => pl.id === officialPlanId);
+
+  const priceForOfficial = (planId: string, chapelId: string, term: number): number => {
+    const plan = OFFICIAL_PRICE_CATALOG.find(c => c.id === chapelId)?.plans.find(pl => pl.id === planId);
+    if (!plan) return 0;
+    if (term > 0) {
+      const t = plan.terms.find(x => x.termMonths === term);
+      if (t) return t.total;
+    }
+    return plan.contado;
+  };
+
+  const handleOfficialChapelChange = (chapelId: string) => {
+    setOfficialChapelId(chapelId);
+    setOfficialPlanId('');
+    setOfficialTerm(0);
+  };
+
+  const handleOfficialPlanChange = (planId: string) => {
+    setOfficialPlanId(planId);
+    setOfficialTerm(0);
+    if (planId) setSaleAmount(priceForOfficial(planId, officialChapelId, 0));
+  };
+
+  const handleOfficialTermChange = (term: number) => {
+    setOfficialTerm(term);
+    if (officialPlanId) setSaleAmount(priceForOfficial(officialPlanId, officialChapelId, term));
+  };
+
+  const clearOfficialPlan = () => {
+    setOfficialChapelId('');
+    setOfficialPlanId('');
+    setOfficialTerm(0);
+    const p = packages.find(item => item.id === selectedPackageId) || packages[0];
+    if (p) setSaleAmount(p.price);
   };
 
   const handleAddReferral = () => {
@@ -180,7 +243,16 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
       return;
     }
 
-    const selectedPkg = packages.find(p => p.id === selectedPackageId) || packages[0];
+    const genericPkg = packages.find(p => p.id === selectedPackageId) || packages[0];
+    // Si se eligió capilla + plan oficial, ese es el plan que se guarda; si no, el paquete genérico.
+    const selectedPkg: { id: string; name: string; price: number } =
+      officialChapel && officialPlan
+        ? {
+            id: officialPlan.id,
+            name: `${officialPlan.name} - ${officialChapel.shortName}${officialTerm > 0 ? ` (${officialTerm} meses)` : ' (Contado)'}`,
+            price: priceForOfficial(officialPlan.id, officialChapel.id, officialTerm)
+          }
+        : genericPkg;
     const contactId = initialContact?.id || `cnt_${Date.now()}`;
     const finalUserId = (isExecutive && assignedUserId) ? assignedUserId : currentUser.id;
     const targetUser = allUsers.find(u => u.id === finalUserId);
@@ -518,7 +590,7 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
             </div>
             <div className="space-y-1.5">
               {packages.map((pkg) => {
-                const isSelected = selectedPackageId === pkg.id;
+                const isSelected = !officialPlan && selectedPackageId === pkg.id;
                 return (
                   <div
                     key={pkg.id}
@@ -558,6 +630,71 @@ export const ModalQuickCapture: React.FC<ModalQuickCaptureProps> = ({
                 );
               })}
             </div>
+          </div>
+
+          {/* 4b. Capilla y Plan Oficial (opcional) */}
+          <div className="space-y-2 bg-slate-800/40 p-3 rounded-xl border border-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+                Capilla y Plan Oficial (opcional)
+              </span>
+              {officialPlan && (
+                <button
+                  type="button"
+                  onClick={clearOfficialPlan}
+                  className="text-[11px] text-slate-300 hover:text-white underline"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            <select
+              value={officialChapelId}
+              onChange={(e) => handleOfficialChapelChange(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-400"
+            >
+              <option value="">Seleccionar capilla...</option>
+              {OFFICIAL_PRICE_CATALOG.map(c => (
+                <option key={c.id} value={c.id}>{c.shortName}</option>
+              ))}
+            </select>
+
+            {officialChapel && (
+              <select
+                value={officialPlanId}
+                onChange={(e) => handleOfficialPlanChange(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="">Seleccionar plan...</option>
+                {officialChapel.plans.map(pl => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.name} - ${pl.contado.toLocaleString('es-MX')}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {officialPlan && (
+              <select
+                value={officialTerm}
+                onChange={(e) => handleOfficialTermChange(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value={0}>Contado - ${officialPlan.contado.toLocaleString('es-MX')}</option>
+                {officialPlan.terms.map(t => (
+                  <option key={t.termMonths} value={t.termMonths}>
+                    {t.termMonths} meses - ${t.total.toLocaleString('es-MX')} (semanal ${t.weekly.toLocaleString('es-MX')})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {officialPlan && (
+              <p className="text-xs text-emerald-300">
+                Se guardará: {officialPlan.name} - {officialChapel?.shortName}
+              </p>
+            )}
           </div>
 
           {/* 5. Resultado de la Interacción */}

@@ -360,3 +360,9 @@ export const OFFICIAL_PRICE_CATALOG: ChapelCatalog[] = [
     ]
   }
 ];
+
+/** True si el id corresponde al paquete ancla generico o a un plan oficial marcado como ancla. */
+export const isAnchorPackageId = (id: string | undefined): boolean =>
+  id === 'pkg_celestial' ||
+  OFFICIAL_PRICE_CATALOG.some(c => c.plans.some(pl => pl.id === id && pl.isAnchor));
+

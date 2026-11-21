@@ -3,6 +3,7 @@ import {
   SemaforoStatus, BranchId 
 } from '../types';
 import { getTodayDateString } from './storage';
+import { isAnchorPackageId } from '../data/officialPriceList';
 
 /**
  * Calculates real-time daily metrics for an individual sales advisor
@@ -93,7 +94,7 @@ export function calculateAdvisor90DayMetrics(
     : 0;
 
   // High-ticket anchor focus (% of activities where anchor package was presented)
-  const anchorActivities = userActivities.filter(a => a.packageOfferedId === 'pkg_celestial').length;
+  const anchorActivities = userActivities.filter(a => isAnchorPackageId(a.packageOfferedId)).length;
   const anchorFocusRate = userActivities.length > 0 
     ? Math.round((anchorActivities / userActivities.length) * 100) 
     : 0;
